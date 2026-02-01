@@ -1,0 +1,273 @@
+/* Deep Swipe Extension Styles */
+
+/* Hide any focus outlines or borders that might appear during generation */
+.mes .mes_text,
+.mes .mes_block {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Remove any orange/red dotted borders that appear during generation */
+.mes.generating .mes_text,
+.mes.generating .mes_block,
+.mes.generation-blink .mes_text,
+.mes.generation-blink .mes_block {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-bottom: none !important;
+}
+
+/* Hide any generation-related borders */
+.mes [class*="generat"] {
+    outline: none !important;
+    border: none !important;
+}
+
+/* Target any dotted borders specifically */
+.mes * {
+    outline-style: none !important;
+}
+
+/* Disable swipe navigation when message is being edited */
+.mes.is_editing .deep-swipe-left,
+.mes.is_editing .deep-swipe-right,
+.mes:has(.edit_textarea) .deep-swipe-left,
+.mes:has(.edit_textarea) .deep-swipe-right {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+}
+
+/* Generate button styling */
+.mes_button.deep-swipe-btn {
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.mes_button.deep-swipe-btn:hover {
+    opacity: 1;
+}
+
+/* Hide on last message (native swipe buttons exist there) */
+.last_mes .deep-swipe-btn {
+    display: none !important;
+}
+
+/* Hide on system messages */
+.mes[is_system="true"] .deep-swipe-btn {
+    display: none !important;
+}
+
+/* Animation for swipe action */
+@keyframes deep-swipe-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.deep-swipe-btn.swiping {
+    animation: deep-swipe-pulse 0.5s ease-in-out;
+    color: var(--active-color, #4a9eff);
+}
+
+/* Deep Swipe Navigation - Using native swipe classes for consistent styling */
+.deep-swipe-left {
+    /* Inherits native .swipe_left styling, just adds our custom class for targeting */
+}
+
+.deep-swipe-left.disabled {
+    opacity: 0 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+    display: none !important;
+}
+
+.deep-swipe-right {
+    /* Inherits native .swipe_right styling, just adds our custom class for targeting */
+}
+
+/* IMPORTANT: Override native SillyTavern hiding behavior for our extension */
+/* SillyTavern hides .swipe_left, .swipe_right, .swipes-counter on non-last messages */
+/* We need to show our navigation on user messages regardless of position */
+/* Use higher specificity selectors to override native rules */
+body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-left.swipe_left:not(.disabled),
+body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-right.swipe_right {
+    opacity: 0.5 !important;
+    visibility: visible !important;
+    display: flex !important;
+    pointer-events: auto !important;
+}
+
+/* Disabled left arrow - hide completely when only one swipe */
+body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-left.disabled.swipe_left {
+    opacity: 0 !important;
+    visibility: hidden !important;
+    display: none !important;
+    pointer-events: none !important;
+}
+
+/* Also show the counter - target it via the message element */
+body:not(.swipeAllMessages) .mes:not(.last_mes) .swipeRightBlock .swipes-counter {
+    opacity: 0.5 !important;
+    visibility: visible !important;
+    display: flex !important;
+}
+
+/* Deep swipe counter styling - match greyed-out native assistant counter appearance */
+.deep-swipe-counter {
+    font-size: 12px;
+    padding: 0 5px;
+    font-family: var(--mainFontFamily);
+    font-weight: 400;
+    align-self: center;
+    min-width: 40px;
+    display: flex;
+    justify-content: center;
+    height: var(--swipeCounterHeight);
+    pointer-events: auto;
+    /* Use same color as native swipes-counter but with greyed-out opacity */
+    color: var(--SmartThemeBodyColor) !important;
+    opacity: 0.3 !important;
+}
+
+/* CRITICAL: Override the specific native rule that hides .swipe_left on messages without swipes_visible class */
+/* Use body prefix for higher specificity */
+body .mes:not(.swipes_visible) .deep-swipe-left.swipe_left:not(.disabled) {
+    opacity: 0.5 !important;
+    visibility: visible !important;
+    display: flex !important;
+    pointer-events: auto !important;
+}
+
+/* Disabled state - must override the above rule with higher specificity */
+body .mes:not(.swipes_visible) .deep-swipe-left.disabled.swipe_left {
+    opacity: 0 !important;
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    visibility: hidden !important;
+    display: none !important;
+}
+
+body .mes:not(.swipes_visible, .last_swipe) .deep-swipe-right.swipe_right {
+    opacity: 0.5 !important;
+    visibility: visible !important;
+    display: flex !important;
+    pointer-events: auto !important;
+}
+
+/* Additional override for any other hiding rules */
+body:not(.swipeAllMessages) .mes .deep-swipe-left.swipe_left,
+body:not(.swipeAllMessages) .mes .deep-swipe-right.swipe_right {
+    opacity: 0.5 !important;
+    visibility: visible !important;
+    display: flex !important;
+    pointer-events: auto !important;
+}
+
+/* Assistant message right arrow - position at bottom right, above native counter */
+.deep-swipe-right.assistant-swipe-arrow {
+    position: absolute;
+    right: 7px;
+    bottom: 18px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 25px;
+    height: 25px;
+    font-size: 20px;
+    color: var(--body-text-color, #ccc);
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
+}
+
+/* User message counter - match native counter color */
+.swipes-counter {
+    color: var(--SmartThemeBodyColor) !important;
+}
+
+/* User message right block - match positioning with assistant swipe arrow */
+.swipeRightBlock .deep-swipe-right {
+    position: relative;
+    right: 0;
+    bottom: 0;
+}
+
+.deep-swipe-right.assistant-swipe-arrow:hover {
+    opacity: 1;
+}
+
+/* Hide navigation on last message (native swipe buttons exist there) */
+.last_mes .deep-swipe-left,
+.last_mes .deep-swipe-right {
+    display: none !important;
+}
+
+/* Hide navigation on user messages ONLY if userSwipes is disabled */
+/* This is controlled by JavaScript, not CSS */
+
+/* Hide navigation on system messages */
+.mes[is_system="true"] .deep-swipe-left,
+.mes[is_system="true"] .deep-swipe-right {
+    display: none !important;
+}
+
+/* Legacy container style (for backward compatibility) */
+.deep-swipe-navigation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.deep-swipe-arrow {
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 3px;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    font-size: 14px;
+    color: var(--body-text-color, #ccc);
+}
+
+.deep-swipe-arrow:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--active-color, #4a9eff);
+}
+
+.deep-swipe-arrow:active {
+    transform: scale(0.95);
+}
+
+/* Animation for navigation updates */
+@keyframes deep-swipe-counter-update {
+    0% { opacity: 0.5; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.1); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.deep-swipe-counter.updating {
+    animation: deep-swipe-counter-update 0.3s ease;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .deep-swipe-left,
+    .deep-swipe-right {
+        width: 30px;
+        height: 30px;
+        font-size: 16px;
+    }
+
+    .deep-swipe-counter {
+        font-size: 12px;
+    }
+}
