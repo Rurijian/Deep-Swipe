@@ -9,9 +9,9 @@
  */
 
 import { extension_settings, getContext } from "../../../extensions.js";
-import { saveSettingsDebounced, Generate, saveChatConditional, deleteMessage, deleteSwipe, eventSource, event_types } from "../../../../script.js";
+import { saveSettingsDebounced, Generate, saveChatConditional, deleteMessage, deleteSwipe, eventSource, event_types, streamingProcessor } from "../../../../script.js";
 import { oai_settings } from "../../../../scripts/openai.js";
-import { updateReasoningUI, ReasoningType } from "../../../../scripts/reasoning.js";
+import { updateReasoningUI, ReasoningType, parseReasoningFromString } from "../../../../scripts/reasoning.js";
 
 const EXTENSION_NAME = 'deep-swipe';
 const extensionFolderPath = `scripts/extensions/third-party/${EXTENSION_NAME}`;
@@ -372,59 +372,22 @@ async function generateUserMessageSwipe(message, messageId, context) {
         const originalText = textarea ? textarea.value : '';
         let interceptedText = null;
 
-        // Create interceptor function
-        const interceptInput = () => {
-            if (textarea && textarea.value !== originalText && !interceptedText) {
-                interceptedText = textarea.value;
-                // Restore original content
-                textarea.value = originalText;
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        };
-
-        // Set up event listener for input events
-        textarea?.addEventListener('input', interceptInput, { once: true });
-
-        // Set up event listener to capture reasoning from the generation
-        // This listens for STREAM_REASONING_DONE which contains the reasoning data
-        const reasoningHandler = (reasoning, duration, msgId, state) => {
-            if (reasoning && typeof reasoning === 'string') {
-                capturedReasoning = reasoning;
-                reasoningDuration = duration;
-            }
-        };
-        eventSource.on(event_types.STREAM_REASONING_DONE, reasoningHandler);
-
-        // Set up event listener to capture generation timing
-        const generationStartHandler = () => {
-            generationStarted = new Date();
-        };
-        eventSource.on(event_types.GENERATION_STARTED, generationStartHandler);
-
-        const generationEndHandler = () => {
-            generationFinished = new Date();
-        };
-        eventSource.on(event_types.GENERATION_ENDED, generationEndHandler);
+        // NOTE: Reasoning capture temporarily disabled due to infinite loop issue
+        // The loop appears to be caused by something in the textarea interaction
+        // TODO: Re-implement reasoning capture without triggering the loop
 
         try {
             // Generate using impersonate (sends as user role)
             await Generate('impersonate', generateOptions);
 
-            // Give a moment for the input event to fire
+            // Wait a moment for the text to appear
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // If we didn't intercept, check the value directly
-            if (!interceptedText && textarea && textarea.value !== originalText) {
+            // Capture text from textarea
+            if (textarea && textarea.value !== originalText) {
                 interceptedText = textarea.value;
-                textarea.value = originalText;
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
             }
         } finally {
-            // Clean up listeners
-            textarea?.removeEventListener('input', interceptInput);
-            eventSource.removeListener(event_types.STREAM_REASONING_DONE, reasoningHandler);
-            eventSource.removeListener(event_types.GENERATION_STARTED, generationStartHandler);
-            eventSource.removeListener(event_types.GENERATION_ENDED, generationEndHandler);
             // Restore original impersonation prompt
             oai_settings.impersonation_prompt = originalImpersonationPrompt;
         }
