@@ -9,8 +9,9 @@
  */
 
 import { extension_settings, getContext } from "../../../extensions.js";
-import { saveSettingsDebounced, Generate, saveChatConditional, deleteMessage, deleteSwipe } from "../../../../script.js";
+import { saveSettingsDebounced, Generate, saveChatConditional, deleteMessage, deleteSwipe, eventSource, event_types, streamingProcessor } from "../../../../script.js";
 import { oai_settings } from "../../../../scripts/openai.js";
+import { updateReasoningUI, ReasoningType, parseReasoningFromString } from "../../../../scripts/reasoning.js";
 
 const EXTENSION_NAME = 'deep-swipe';
 const extensionFolderPath = `scripts/extensions/third-party/${EXTENSION_NAME}`;
@@ -93,6 +94,44 @@ function formatSwipeCounter(current, total) {
 /**
  * Navigate to the previous swipe on a message
  */
+/**
+ * Sync reasoning data from swipe_info to message extra
+ * @param {object} message - The message object
+ * @param {number} swipeId - The swipe ID to sync from
+ */
+function syncReasoningFromSwipeInfo(message, swipeId) {
+    if (!message.swipe_info || !message.swipe_info[swipeId]) {
+        return;
+    }
+    
+    const swipeInfo = message.swipe_info[swipeId];
+    if (!message.extra) {
+        message.extra = {};
+    }
+    
+    // Sync reasoning data
+    if (swipeInfo.extra?.reasoning !== undefined) {
+        message.extra.reasoning = swipeInfo.extra.reasoning;
+    } else {
+        delete message.extra.reasoning;
+    }
+    
+    if (swipeInfo.extra?.reasoning_duration !== undefined) {
+        message.extra.reasoning_duration = swipeInfo.extra.reasoning_duration;
+    } else {
+        delete message.extra.reasoning_duration;
+    }
+    
+    if (swipeInfo.extra?.reasoning_type !== undefined) {
+        message.extra.reasoning_type = swipeInfo.extra.reasoning_type;
+    } else {
+        delete message.extra.reasoning_type;
+    }
+}
+
+/**
+ * Navigate to the previous swipe on a message
+ */
 async function dswipeBack(args, messageId) {
     // Check if any message is being edited
     if (isAnyMessageBeingEdited()) {
@@ -132,6 +171,9 @@ async function dswipeBack(args, messageId) {
             // Load text from the new swipe
             message.mes = message.swipes[targetSwipeId];
             
+            // Sync reasoning data from swipe_info
+            syncReasoningFromSwipeInfo(message, targetSwipeId);
+            
             // Restore hidden messages
             chat.push(...messagesToRestore);
             
@@ -143,8 +185,9 @@ async function dswipeBack(args, messageId) {
                 showSwipes: true
             });
             
-            // Update UI
+            // Update UI including reasoning
             updateMessageSwipeUI(messageId);
+            updateReasoningUI(messageId, { reset: true });
             
             return `Navigated to swipe ${message.swipe_id + 1}/${message.swipes.length}`;
         } else {
@@ -258,6 +301,7 @@ async function dswipeForward(args, messageId) {
 
 /**
  * Generate a new swipe for a user message using guided impersonation
+ * Now with support for reasoning/thinking traces
  */
 async function generateUserMessageSwipe(message, messageId, context) {
     const impersonationPrompt = extension_settings[EXTENSION_NAME]?.impersonationPrompt || '';
@@ -268,10 +312,18 @@ async function generateUserMessageSwipe(message, messageId, context) {
         return;
     }
 
-    // Initialize swipes array if needed
+    // Initialize swipes array and swipe_info if needed
     if (!Array.isArray(message.swipes)) {
         message.swipes = [message.mes];
         message.swipe_id = 0;
+    }
+    if (!Array.isArray(message.swipe_info)) {
+        message.swipe_info = message.swipes.map(() => ({
+            send_date: message.send_date,
+            gen_started: message.gen_started,
+            gen_finished: message.gen_finished,
+            extra: structuredClone(message.extra || {}),
+        }));
     }
 
     // Get current swipe text
@@ -293,100 +345,170 @@ async function generateUserMessageSwipe(message, messageId, context) {
     message.swipes.push('');
     message.swipe_id = message.swipes.length - 1;
 
+    // Variables to capture reasoning data
+    let capturedReasoning = '';
+    let reasoningDuration = null;
+    let generationStarted = null;
+    let generationFinished = null;
+    let generatedText = '';
+
     try {
         // Show ellipsis (...) before generation starts
         if (messageElement) {
             messageElement.textContent = '...';
         }
 
-        // Use impersonate generation to get user role
-        // We'll intercept the text before it goes to the input box
-        // Temporarily clear SillyTavern's impersonation prompt to avoid duplication
-        const originalImpersonationPrompt = oai_settings.impersonation_prompt;
-        oai_settings.impersonation_prompt = '';
+        // Record generation start time for reasoning duration
+        generationStarted = new Date();
+
+        // WORKAROUND: To send the impersonation prompt as a user message instead of system,
+        // we temporarily add a user message to the chat, then use quiet generation.
+        // The prompt will be included as part of the chat history as a user message.
+        const tempUserMessage = {
+            name: userName,
+            is_user: true,
+            mes: fullPrompt,
+            send_date: new Date().toISOString(),
+            extra: { isSmallSys: true }, // Mark as small system to hide from normal view
+        };
+        
+        // Add temporary message to chat
+        chat.push(tempUserMessage);
 
         const generateOptions = {
-            quiet_prompt: fullPrompt,
+            quiet_prompt: '', // Empty since we added our prompt as a user message
         };
-
-        // Get textarea reference
-        const textarea = document.getElementById('send_textarea');
-        const originalText = textarea ? textarea.value : '';
-        let interceptedText = null;
-
-        // Create interceptor function
-        const interceptInput = () => {
-            if (textarea && textarea.value !== originalText && !interceptedText) {
-                interceptedText = textarea.value;
-                // Restore original content
-                textarea.value = originalText;
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        };
-
-        // Set up event listener for input events
-        textarea?.addEventListener('input', interceptInput, { once: true });
 
         try {
-            // Generate using impersonate (sends as user role)
-            await Generate('impersonate', generateOptions);
+            // Generate using quiet mode - our temp message will be the last user message
+            const result = await Generate('quiet', generateOptions);
 
-            // Give a moment for the input event to fire
-            await new Promise(resolve => setTimeout(resolve, 100));
+            // Record generation finish time
+            generationFinished = new Date();
 
-            // If we didn't intercept, check the value directly
-            if (!interceptedText && textarea && textarea.value !== originalText) {
-                interceptedText = textarea.value;
-                textarea.value = originalText;
-                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            // Remove the temporary message from chat
+            chat.pop();
+
+            // Extract the generated text from the result
+            if (typeof result === 'string') {
+                generatedText = result;
+            } else if (result) {
+                // Check for common properties that might contain the generated text
+                if (typeof result.text === 'string') {
+                    generatedText = result.text;
+                } else if (typeof result.mes === 'string') {
+                    generatedText = result.mes;
+                } else if (typeof result.getMessage === 'function') {
+                    generatedText = result.getMessage();
+                } else if (typeof result.getMessage === 'string') {
+                    generatedText = result.getMessage;
+                } else if (typeof result.message === 'string') {
+                    generatedText = result.message;
+                } else if (typeof result.content === 'string') {
+                    generatedText = result.content;
+                }
             }
-        } finally {
-            // Clean up listener
-            textarea?.removeEventListener('input', interceptInput);
-            // Restore original impersonation prompt
-            oai_settings.impersonation_prompt = originalImpersonationPrompt;
+
+            // Parse reasoning from the generated text after generation completes
+            // This avoids the infinite loop caused by streaming event listeners
+            if (generatedText) {
+                const parsedResult = parseReasoningFromString(generatedText, { strict: true });
+                if (parsedResult && parsedResult.reasoning) {
+                    capturedReasoning = parsedResult.reasoning;
+                    // Use the message content without the reasoning block
+                    generatedText = parsedResult.content;
+                    reasoningDuration = generationFinished.getTime() - generationStarted.getTime();
+                    console.debug(`[${EXTENSION_NAME}] Parsed reasoning from impersonation:`, capturedReasoning.substring(0, 50) + '...');
+                }
+            }
+        } catch (error) {
+            // Make sure to clean up temp message even on error
+            if (chat[chat.length - 1] === tempUserMessage) {
+                chat.pop();
+            }
+            throw error;
         }
 
-        // Use intercepted text as result
-        const result = interceptedText;
-        
-        // Extract the generated text from the result
-        let generatedText = '';
-        
-        // Try multiple possible result structures
-        if (typeof result === 'string') {
-            generatedText = result;
-        } else if (result) {
-            // Check for common properties that might contain the generated text
-            if (typeof result.text === 'string') {
-                generatedText = result.text;
-            } else if (typeof result.mes === 'string') {
-                generatedText = result.mes;
-            } else if (typeof result.getMessage === 'function') {
-                generatedText = result.getMessage();
-            } else if (typeof result.getMessage === 'string') {
-                generatedText = result.getMessage;
-            } else if (typeof result.message === 'string') {
-                generatedText = result.message;
-            } else if (typeof result.content === 'string') {
-                generatedText = result.content;
-            }
-        }
+        console.log(`[${EXTENSION_NAME}] Before saving - message state:`, {
+            is_user: message.is_user,
+            name: message.name,
+            swipe_id: message.swipe_id,
+            swipes_length: message.swipes?.length,
+            has_generated_text: !!(generatedText && generatedText.trim()),
+        });
 
         // If we got generated text, use it; otherwise duplicate current
         if (generatedText && generatedText.trim()) {
-            message.swipes[message.swipe_id] = generatedText.trim();
+            const trimmedText = generatedText.trim();
+            message.swipes[message.swipe_id] = trimmedText;
             // CRITICAL FIX: Update message.mes to match the new swipe!
-            message.mes = generatedText.trim();
+            message.mes = trimmedText;
+
+            // Ensure message keeps its user properties
+            message.is_user = true;
+            if (!message.name || message.name === 'System') {
+                const context = getContext();
+                message.name = context.name1 || 'User';
+            }
+
+            console.log(`[${EXTENSION_NAME}] After setting text - message state:`, {
+                is_user: message.is_user,
+                name: message.name,
+                mes_preview: message.mes?.substring(0, 50) + '...',
+            });
+
+            // Create swipe_info entry with reasoning data
+            const swipeInfoExtra = {
+                ...structuredClone(message.extra || {}),
+            };
+
+            // Store reasoning data if captured
+            if (capturedReasoning) {
+                swipeInfoExtra.reasoning = capturedReasoning;
+                swipeInfoExtra.reasoning_duration = reasoningDuration;
+                swipeInfoExtra.reasoning_type = ReasoningType.Model;
+            }
+
+            // Add swipe_info entry
+            message.swipe_info.push({
+                send_date: generationFinished ? generationFinished.toISOString() : new Date().toISOString(),
+                gen_started: generationStarted,
+                gen_finished: generationFinished,
+                extra: swipeInfoExtra,
+            });
+
+            // Also update current message extra with reasoning for immediate display
+            if (capturedReasoning) {
+                if (!message.extra) {
+                    message.extra = {};
+                }
+                message.extra.reasoning = capturedReasoning;
+                message.extra.reasoning_duration = reasoningDuration;
+                message.extra.reasoning_type = ReasoningType.Model;
+            }
         } else {
             // Fallback: duplicate current message
             message.swipes[message.swipe_id] = currentText;
             message.mes = currentText;
+            
+            // Copy swipe_info from current swipe
+            const currentSwipeId = message.swipe_id > 0 ? message.swipe_id - 1 : 0;
+            message.swipe_info.push(structuredClone(message.swipe_info?.[currentSwipeId] || {
+                send_date: new Date().toISOString(),
+                gen_started: null,
+                gen_finished: null,
+                extra: structuredClone(message.extra || {}),
+            }));
         }
 
         // Remove the waiting toast
         if (waitingToast) {
             $(waitingToast).remove();
+        }
+
+        // Update reasoning UI if reasoning was captured
+        if (capturedReasoning) {
+            updateReasoningUI(messageId);
         }
 
     } catch (error) {
@@ -397,6 +519,7 @@ async function generateUserMessageSwipe(message, messageId, context) {
         }
         // Revert swipe
         message.swipes.pop();
+        message.swipe_info?.pop();
         message.swipe_id = Math.max(0, message.swipes.length - 1);
         // Restore original message text in UI
         if (messageElement) {
@@ -575,6 +698,9 @@ function addSwipeNavigationToMessage(messageId) {
             if (msg.is_user) {
                 msg.swipe_id = targetSwipeId;
                 msg.mes = msg.swipes[targetSwipeId];
+                
+                // Sync reasoning data from swipe_info
+                syncReasoningFromSwipeInfo(msg, targetSwipeId);
             } else {
                 // For assistant messages, try native swipe but fallback to manual if it fails
                 // SillyTavern only allows swiping the last message.
@@ -627,7 +753,9 @@ function addSwipeNavigationToMessage(messageId) {
                 showSwipes: true
             });
             
+            // Update UI including reasoning
             updateMessageSwipeUI(messageId);
+            updateReasoningUI(messageId, { reset: true });
         }
     });
 
