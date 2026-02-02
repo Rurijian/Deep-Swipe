@@ -1074,8 +1074,8 @@ function initializeUi() {
         });
     }
 
-    // Intercept delete button clicks to enable swipe deletion for user messages
-    // Native SillyTavern only allows swipe deletion for assistant messages (!message.is_user)
+    // Intercept delete button clicks to enable swipe deletion for messages
+    // Native SillyTavern only allows swipe deletion for the last assistant message
     // Use capturing phase to intercept BEFORE the native handler
     document.addEventListener('click', async function (e) {
         // Check if the clicked element is the delete button
@@ -1102,19 +1102,23 @@ function initializeUi() {
         if (!isValidMessageId(messageId, chat)) return;
 
         const message = chat[messageId];
+        const isLastMessage = messageId === chat.length - 1;
 
-        // Only handle if this is a user message
-        if (!message.is_user) return;
-
-        // Check if user swipes feature is enabled
-        if (!extension_settings[EXTENSION_NAME]?.userSwipes) return;
+        // For user messages: handle if user swipes feature is enabled
+        if (message.is_user) {
+            if (!extension_settings[EXTENSION_NAME]?.userSwipes) return;
+        } else {
+            // For assistant messages: only handle if it's NOT the last message
+            // (last message is handled natively by SillyTavern)
+            if (isLastMessage) return;
+        }
 
         // Check if there are multiple swipes to delete
         if (!Array.isArray(message.swipes) || message.swipes.length <= 1) return;
 
         const swipeIndex = message.swipe_id ?? 0;
 
-        // This is a user message with multiple swipes - handle it ourselves
+        // This is a message with multiple swipes - handle it ourselves
         // Stop the native handler by preventing default and stopping propagation
         e.preventDefault();
         e.stopPropagation();
