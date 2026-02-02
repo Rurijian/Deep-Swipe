@@ -9,7 +9,7 @@
  */
 
 import { extension_settings, getContext } from "../../../extensions.js";
-import { saveSettingsDebounced, Generate } from "../../../../script.js";
+import { saveSettingsDebounced, Generate, saveChatConditional } from "../../../../script.js";
 
 const EXTENSION_NAME = 'deep-swipe';
 const extensionFolderPath = `scripts/extensions/third-party/${EXTENSION_NAME}`;
@@ -201,20 +201,11 @@ async function dswipeForward(args, messageId) {
         toastr.info(`Temporarily hiding ${messagesToRestore.length} message(s)...`, 'Deep Swipe');
     }
 
-    // Store original message text for restoration on error (for assistant messages)
-    const originalMessageText = message.mes;
-    const originalSwipeId = message.swipe_id || 0;
-    const originalSwipes = message.swipes ? [...message.swipes] : null;
-
-    // Get the message element for UI restoration
-    const messageElement = document.querySelector(`.mes[mesid="${messageId}"] .mes_text`);
-
     try {
         // Check if this is a user message that needs guided impersonation
         if (message.is_user && extension_settings[EXTENSION_NAME]?.impersonationPrompt) {
             await generateUserMessageSwipe(message, messageId, context);
         } else {
-            // For assistant messages, the native swipe.right() may show ellipsis
             await context.swipe.right(null, { message, forceMesId: messageId });
         }
         
@@ -238,28 +229,16 @@ async function dswipeForward(args, messageId) {
             }, 100);
         }
 
+        // Save the chat to persist the new swipe
+        await saveChatConditional();
+
         toastr.success(`Generated new swipe for message #${messageId}`, 'Deep Swipe');
         return `Generated new swipe`;
 
     } catch (error) {
         chat.push(...messagesToRestore);
         console.error(`[${EXTENSION_NAME}] Error:`, error);
-
-        // Restore original message state for assistant messages
-        if (!message.is_user) {
-            message.mes = originalMessageText;
-            message.swipe_id = originalSwipeId;
-            if (originalSwipes) {
-                message.swipes = [...originalSwipes];
-            }
-
-            // Restore the UI if the message element exists
-            if (messageElement) {
-                messageElement.textContent = originalMessageText;
-            }
-        }
-
-        toastr.error(`Failed to generate swipe: ${error.message}. Original text restored.`, 'Deep Swipe');
+        toastr.error(`Failed to generate swipe: ${error.message}`, 'Deep Swipe');
         return 'Generation failed';
     }
 }
@@ -282,7 +261,7 @@ async function generateUserMessageSwipe(message, messageId, context) {
         message.swipe_id = 0;
     }
 
-    // Get current swipe text - store original text for restoration on error
+    // Get current swipe text
     const currentText = message.mes;
     const userName = context.name1 || 'User';
     
@@ -300,9 +279,6 @@ async function generateUserMessageSwipe(message, messageId, context) {
     // Add placeholder for new swipe
     message.swipes.push('');
     message.swipe_id = message.swipes.length - 1;
-
-    // Track if generation succeeded
-    let generationSucceeded = false;
 
     try {
         // Show ellipsis (...) before generation starts
@@ -353,27 +329,25 @@ async function generateUserMessageSwipe(message, messageId, context) {
             message.mes = currentText;
         }
 
-        generationSucceeded = true;
-
-    } catch (error) {
-        console.error(`[${EXTENSION_NAME}] Error in guided impersonation:`, error);
-        // Revert swipe
-        message.swipes.pop();
-        message.swipe_id = Math.max(0, message.swipes.length - 1);
-        // Restore original message text
-        message.mes = currentText;
-        throw error;
-    } finally {
         // Remove the waiting toast
         if (waitingToast) {
             $(waitingToast).remove();
         }
 
-        // If generation failed, restore the original text in the UI
-        if (!generationSucceeded && messageElement) {
-            messageElement.textContent = currentText;
-            toastr.error('Failed to generate swipe. Original text restored.', 'Deep Swipe');
+    } catch (error) {
+        console.error(`[${EXTENSION_NAME}] Error in guided impersonation:`, error);
+        // Remove the waiting toast
+        if (waitingToast) {
+            $(waitingToast).remove();
         }
+        // Revert swipe
+        message.swipes.pop();
+        message.swipe_id = Math.max(0, message.swipes.length - 1);
+        // Restore original message text in UI
+        if (messageElement) {
+            messageElement.textContent = currentText;
+        }
+        throw error;
     }
 }
 
@@ -672,10 +646,11 @@ function updateMessageSwipeUI(messageId) {
     const currentId = message.swipe_id || 0;
 
     // Update counter - use the correct class name (swipes-counter, not deep-swipe-counter)
-    const counter = messageElement.querySelector('.swipes-counter');
-    if (counter) {
+    // Update ALL counters found (there may be multiple due to DOM structure)
+    const counters = messageElement.querySelectorAll('.swipes-counter');
+    counters.forEach((counter) => {
         counter.textContent = formatSwipeCounter(currentId, swipeCount);
-    }
+    });
  
     // Update right arrow tooltip based on position
     const rightArrow = messageElement.querySelector('.deep-swipe-right');
