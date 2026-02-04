@@ -19,11 +19,12 @@ A SillyTavern extension that allows you to swipe (regenerate) any message in you
 **⚠️WARNING⚠️ Deep Swipes high up in the context will break cache hits!**
 
 **⚠️EXTENSION CONFLICTS⚠️**
-Deep Swipe modifies chat state during generation in ways that may conflict with other extensions that also interact with the generation process. Specifically:
-- **Prompt Inspector**: Using Prompt Inspector's "Cancel generation" button during a Deep Swipe generation may result in incomplete cleanup or corrupted chat state. Always use Deep Swipe's own "Stop" button to cancel generations.
-- **Other extensions** that hook into generation events may cause similar issues.
+Deep Swipe is **INCOMPATIBLE** with Prompt Inspector. Due to the way both extensions interact with the generation process:
+- **Deep Swipe will REFUSE to generate** while Prompt Inspector's "Inspect Prompts" feature is enabled
+- You must disable Prompt Inspector (click "Stop Inspecting" in the wand menu) before using Deep Swipe generation
+- Navigating between existing swipes still works while PI is enabled
 
-While Deep Swipe will try to gracefully handle external cancellations, **no guarantees are made** about compatibility with extensions that interfere with the generation process. Use at your own risk when combining with such extensions.
+This is a hard compatibility limit - the extensions fundamentally conflict in how they handle generation state.
 
 ## But who cares, Based Swipe-Fiend!
 
