@@ -76,6 +76,12 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
 
     // Track if this specific Deep Swipe generation is active
     let isOurGeneration = false;
+    
+    // Check if Prompt Inspector is enabled - warn user about potential conflicts
+    const promptInspectorEnabled = localStorage.getItem('promptInspectorEnabled') === 'true';
+    if (promptInspectorEnabled) {
+        toastr.warning('Prompt Inspector is enabled and may interfere with Deep Swipe. If you experience issues, disable PI or use the Deep Swipe Stop button only.', 'Deep Swipe Warning', { timeOut: 8000 });
+    }
 
     // CRITICAL: Capture ALL original data BEFORE any truncation or modifications
     // For assistant swipes, truncation removes the target, so we MUST capture first
