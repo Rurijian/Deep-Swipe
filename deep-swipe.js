@@ -370,32 +370,23 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         });
 
         if (isUserMessage) {
-            // USER MESSAGE: Generate at end like assistant swipes
-            // CRITICAL: Do NOT truncate chat - keep full context but mark target+ as stale
+            // USER MESSAGE: Truncate chat to target, add temp message, generate
+            // CRITICAL: Must truncate chat array so model only sees context up to target
             
-            // Mark target element as stale so Generate() doesn't update it
-            const targetElement = document.querySelector(`.mes[mesid="${messageId}"]`);
-            if (targetElement) {
-                targetElement.setAttribute('mesid', `stale-${messageId}`);
-                console.log('[Deep Swipe] User swipe: Target element marked stale');
-            }
+            // Truncate chat to just after target message
+            chat.length = messageId + 1;
             
-            // CRITICAL: Mark ALL messages from target onwards as stale
-            // This ensures Generate() creates a NEW message at the bottom
-            let staleCount = 0;
-            for (let i = messageId; i < 1000; i++) {
+            // Mark elements after target as stale so Generate() doesn't find them
+            for (let i = messageId + 1; i < 1000; i++) {
                 const el = document.querySelector(`.mes[mesid="${i}"]`);
                 if (el) {
                     el.setAttribute('mesid', `stale-${i}`);
-                    staleCount++;
                 } else {
                     break;
                 }
             }
-            console.log('[Deep Swipe] User swipe: Marked', staleCount, 'messages as stale');
             
-            // CRITICAL: Append temp user message at END of chat
-            // This forces Generate() to create a new message at the end of history
+            // Append temp user message (now at position messageId+1)
             const tempUserMessage = {
                 name: userName,
                 is_user: true,
@@ -405,39 +396,29 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             };
             chat.push(tempUserMessage);
             
-            console.log('[Deep Swipe] User swipe: generating at end of history, context length:', chat.length);
-            // Generate assistant response (creates new message at the very bottom)
+            // Generate with truncated context
             await Generate('normal', {
                 automatic_trigger: true,
             });
             console.log('[Deep Swipe] User swipe: generation complete');
         } else {
-            // ASSISTANT MESSAGE: Generate at bottom like user swipes
-            // CRITICAL: Do NOT truncate chat - keep full context but mark target+ as stale
+            // ASSISTANT MESSAGE: Truncate chat to just before target
+            // The model should only see context UP TO the target message
             
-            // Mark target element as stale so Generate() doesn't update it
-            const targetElement = document.querySelector(`.mes[mesid="${messageId}"]`);
-            if (targetElement) {
-                targetElement.setAttribute('mesid', `stale-${messageId}`);
-                console.log('[Deep Swipe] Target element marked stale');
-            }
+            // Truncate chat to just before target message (remove target and everything after)
+            chat.length = messageId;
             
-            // CRITICAL: Mark ALL messages from target onwards as stale
-            // This ensures Generate() creates a NEW message at the bottom, not replacing existing ones
-            let staleCount = 0;
+            // Mark target and messages after as stale so Generate() doesn't find them
             for (let i = messageId; i < 1000; i++) {
                 const el = document.querySelector(`.mes[mesid="${i}"]`);
                 if (el) {
                     el.setAttribute('mesid', `stale-${i}`);
-                    staleCount++;
                 } else {
                     break;
                 }
             }
-            console.log('[Deep Swipe] Marked', staleCount, 'messages as stale (from target onwards)');
             
-            // CRITICAL: Append temp user message at END of chat (not truncated)
-            // This forces Generate() to create a new message at index 181 (end of history)
+            // Append temp user message (now at position messageId)
             const tempContextMessage = {
                 name: userName,
                 is_user: true,
@@ -447,12 +428,10 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             };
             chat.push(tempContextMessage);
             
-            console.log('[Deep Swipe] Assistant swipe: generating at end of history, context length:', chat.length);
-            // Generate assistant response (creates new message at the very bottom)
+            // Generate with truncated context (only sees messages before target)
             await Generate('normal', {
                 automatic_trigger: true,
             });
-            console.log('[Deep Swipe] Assistant swipe: generation complete');
         }
 
         generationFinished = new Date();
@@ -546,9 +525,18 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             reasoningDuration = assistantReasoningDuration;
         }
 
-        console.log('[Deep Swipe] Messages after target were never removed from chat array');
-        // CRITICAL: We kept full chat context during generation, so no restoration needed
-        // The messages were never removed, only their DOM elements were marked stale
+        // CRITICAL: Restore the chat array after truncation
+        // We truncated the chat during generation, now restore the original messages
+        if (isUserMessage) {
+            // User swipes: insert messages after target (target was kept at messageId)
+            chat.splice(messageId + 1, 0, ...originalMessagesAfter);
+        } else {
+            // Assistant swipes: re-insert target and messages after it
+            if (originalTargetMessage) {
+                chat.splice(messageId, 0, originalTargetMessage);
+            }
+            chat.splice(messageId + 1, 0, ...originalMessagesAfter);
+        }
 
         // Restore the mesid attributes after restoring messages
         // Both user and assistant swipes: restore ALL stale elements by their stale- prefix
