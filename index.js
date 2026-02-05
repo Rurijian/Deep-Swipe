@@ -88,6 +88,37 @@ function initializeUi() {
         setTimeout(() => addUiToAllMessages(), 500);
     });
 
+    // Listen for reasoning deletion to sync to swipe_info
+    // This prevents deleted reasoning from reappearing when swiping
+    context.eventSource.on(context.eventTypes.MESSAGE_REASONING_DELETED, (messageId) => {
+        const chat = context.chat;
+        if (!isValidMessageId(messageId, chat)) return;
+
+        const message = chat[messageId];
+        const swipeId = message.swipe_id ?? 0;
+
+        // Ensure swipe_info exists for this swipe
+        if (!Array.isArray(message.swipe_info)) {
+            message.swipe_info = message.swipes.map(() => ({
+                send_date: message.send_date,
+                extra: {},
+            }));
+        }
+
+        // Sync the deletion to swipe_info
+        if (message.swipe_info[swipeId]) {
+            if (!message.swipe_info[swipeId].extra) {
+                message.swipe_info[swipeId].extra = {};
+            }
+            // Mirror the deletion that reasoning.js performed on message.extra
+            message.swipe_info[swipeId].extra.reasoning = '';
+            delete message.swipe_info[swipeId].extra.reasoning_type;
+            delete message.swipe_info[swipeId].extra.reasoning_duration;
+
+            console.log(`[${EXTENSION_NAME}] Synced reasoning deletion to swipe_info[${swipeId}] for message ${messageId}`);
+        }
+    });
+
     // Set up MutationObservers for dynamic message handling
     setupMutationObservers(context, handleDeleteClick);
 
