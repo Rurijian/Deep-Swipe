@@ -500,7 +500,7 @@ export function createSwipeOverlay(messageId, message, options = {}) {
     // The overlay has pointer-events: none, but we need to make sure children don't block either
     clone.style.pointerEvents = 'none';
     clone.querySelectorAll('*').forEach(el => {
-        // Some elements (like SVGs) don't have a style property
+        // Some elements like SVGs don't have a style property, skip them
         if (el.style) {
             el.style.pointerEvents = 'none';
         }

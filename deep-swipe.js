@@ -9,7 +9,7 @@
  */
 
 import { getContext } from '../../../extensions.js';
-import { Generate, eventSource, event_types, cancelDebouncedChatSave, saveChatConditional, stopGeneration, reloadCurrentChat } from '../../../../script.js';
+import { Generate, eventSource, event_types, cancelDebouncedChatSave, saveChatConditional, stopGeneration } from '../../../../script.js';
 import { updateReasoningUI, ReasoningType } from '../../../../scripts/reasoning.js';
 import { getSettings, EXTENSION_NAME } from './config.js';
 import { syncReasoningFromSwipeInfo, error, isValidMessageId } from './utils.js';
@@ -179,6 +179,18 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     // Show waiting toast
     const waitingToast = toastr.info('Generating Deep Swipe...', 'Deep Swipe', { timeOut: 0, extendedTimeOut: 0 });
 
+    // DEBUG: Log initial state
+    console.log('[Deep Swipe] Starting generation:', {
+        isUserMessage,
+        messageId,
+        chatLength: chat.length,
+        messageObject: message?.mes?.substring(0, 30),
+        chatAtMessageId: chat[messageId]?.mes?.substring(0, 30),
+        messageIsChat: message === chat[messageId],
+        messageName: message?.name,
+        chatAtMessageIdName: chat[messageId]?.name
+    });
+    
     // For USER swipes: Add placeholder now (message won't change)
     // For ASSISTANT swipes: Add placeholder now too (both use same flow now)
     let newSwipeIndex;
@@ -194,7 +206,8 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         }
         targetMessageObject.swipes.push('');
         newSwipeIndex = targetMessageObject.swipes.length - 1;
-        targetMessageObject.swipe_id = newSwipeIndex;
+        // CRITICAL: Do NOT update swipe_id here - keep showing original swipe during generation
+        // The new swipe is stored but not displayed until user navigates to it
         
     } else {
         // ASSISTANT swipes: Also need to initialize newSwipeIndex
@@ -206,7 +219,8 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         }
         targetMessageObject.swipes.push('');
         newSwipeIndex = targetMessageObject.swipes.length - 1;
-        targetMessageObject.swipe_id = newSwipeIndex;
+        // CRITICAL: Do NOT update swipe_id here - keep showing original swipe during generation
+        // The new swipe is stored but not displayed until user navigates to it
     }
 
     // Variables to capture reasoning data
@@ -216,9 +230,10 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     let generationFinished = null;
 
     // Save original messages after target BEFORE any modifications
+    // We push a temp message at the end, so these need to be re-inserted after generation
     const originalMessagesAfter = chat.slice(messageId + 1);
-    // For assistant swipes: also save the target message since we truncate to remove it
-    const originalTargetMessage = !isUserMessage ? chat[messageId] : null;
+    // Keep reference to target message for storing the swipe (still at chat[messageId])
+    const originalTargetMessage = chat[messageId];
 
     // Set up event listener to capture reasoning from streaming
     let streamingReasoningData = null;
@@ -355,20 +370,32 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         });
 
         if (isUserMessage) {
-            // USER MESSAGE: Truncate to target, add temp user message, then generate
-            chat.length = messageId + 1;
+            // USER MESSAGE: Generate at end like assistant swipes
+            // CRITICAL: Do NOT truncate chat - keep full context but mark target+ as stale
             
-            // CRITICAL: Invalidate stale DOM elements' mesid so Generate() can't find them
-            // Generate() looks for elements by mesid, so we add a prefix to make them unfindable
-            for (let i = messageId + 1; i < 100; i++) {
+            // Mark target element as stale so Generate() doesn't update it
+            const targetElement = document.querySelector(`.mes[mesid="${messageId}"]`);
+            if (targetElement) {
+                targetElement.setAttribute('mesid', `stale-${messageId}`);
+                console.log('[Deep Swipe] User swipe: Target element marked stale');
+            }
+            
+            // CRITICAL: Mark ALL messages from target onwards as stale
+            // This ensures Generate() creates a NEW message at the bottom
+            let staleCount = 0;
+            for (let i = messageId; i < 1000; i++) {
                 const el = document.querySelector(`.mes[mesid="${i}"]`);
                 if (el) {
                     el.setAttribute('mesid', `stale-${i}`);
+                    staleCount++;
                 } else {
                     break;
                 }
             }
-
+            console.log('[Deep Swipe] User swipe: Marked', staleCount, 'messages as stale');
+            
+            // CRITICAL: Append temp user message at END of chat
+            // This forces Generate() to create a new message at the end of history
             const tempUserMessage = {
                 name: userName,
                 is_user: true,
@@ -377,53 +404,55 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
                 extra: { isSmallSys: true, isDeepSwipeTemp: true },
             };
             chat.push(tempUserMessage);
-
-            // Generate assistant response to the impersonation prompt
+            
+            console.log('[Deep Swipe] User swipe: generating at end of history, context length:', chat.length);
+            // Generate assistant response (creates new message at the very bottom)
             await Generate('normal', {
                 automatic_trigger: true,
             });
+            console.log('[Deep Swipe] User swipe: generation complete');
         } else {
-            // ASSISTANT MESSAGE: Regenerate in-place (original working approach)
-            // The createSwipeOverlay (called above) shows previous swipe via fixed-position clone
-            // This survives DOM changes and allows "read while generating"
+            // ASSISTANT MESSAGE: Generate at bottom like user swipes
+            // CRITICAL: Do NOT truncate chat - keep full context but mark target+ as stale
             
-            // Find the last user message before the target (to set proper context)
-            let lastUserMessageId = -1;
-            for (let i = messageId - 1; i >= 0; i--) {
-                if (chat[i].is_user) {
-                    lastUserMessageId = i;
-                    break;
-                }
-            }
-            
-            // Truncate to just before the target message
-            // This removes the target from context so Generate() creates a new response
-            chat.length = messageId;
-            
-            // Mark the target element's mesid as stale so Generate() creates fresh element
-            // The overlay (created above) keeps the old content visible
+            // Mark target element as stale so Generate() doesn't update it
             const targetElement = document.querySelector(`.mes[mesid="${messageId}"]`);
             if (targetElement) {
-                targetElement.setAttribute('data-deep-swipe-target', String(messageId));
                 targetElement.setAttribute('mesid', `stale-${messageId}`);
+                console.log('[Deep Swipe] Target element marked stale');
             }
             
-            // Mark messages AFTER target as stale so Generate() doesn't update them
-            for (let i = messageId + 1; i < 100; i++) {
+            // CRITICAL: Mark ALL messages from target onwards as stale
+            // This ensures Generate() creates a NEW message at the bottom, not replacing existing ones
+            let staleCount = 0;
+            for (let i = messageId; i < 1000; i++) {
                 const el = document.querySelector(`.mes[mesid="${i}"]`);
                 if (el) {
                     el.setAttribute('mesid', `stale-${i}`);
+                    staleCount++;
                 } else {
                     break;
                 }
             }
+            console.log('[Deep Swipe] Marked', staleCount, 'messages as stale (from target onwards)');
             
-            console.log('[Deep Swipe] Assistant swipe: calling Generate() after truncating to', chat.length);
-            // Generate assistant response (creates new element at target position)
+            // CRITICAL: Append temp user message at END of chat (not truncated)
+            // This forces Generate() to create a new message at index 181 (end of history)
+            const tempContextMessage = {
+                name: userName,
+                is_user: true,
+                mes: '[Continuing conversation...]',
+                send_date: new Date().toISOString(),
+                extra: { isSmallSys: true, isDeepSwipeTemp: true },
+            };
+            chat.push(tempContextMessage);
+            
+            console.log('[Deep Swipe] Assistant swipe: generating at end of history, context length:', chat.length);
+            // Generate assistant response (creates new message at the very bottom)
             await Generate('normal', {
                 automatic_trigger: true,
             });
-            console.log('[Deep Swipe] Assistant swipe: Generate() completed');
+            console.log('[Deep Swipe] Assistant swipe: generation complete');
         }
 
         generationFinished = new Date();
@@ -439,6 +468,20 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         // This is critical to prevent any saves that might trigger after generation
 
         console.log('[Deep Swipe] After Generate(), chat length:', chat.length);
+        
+        // DEBUG: Check DOM state after generation
+        const staleEl = document.querySelector('.mes[mesid="stale-151"]');
+        const newEl = document.querySelector('.mes[mesid="151"]');
+        const allMes = document.querySelectorAll('#chat .mes');
+        console.log('[Deep Swipe] DOM state after Generate:', {
+            stale151Exists: !!staleEl,
+            stale151Mes: staleEl?.querySelector('.mes_text')?.textContent?.substring(0, 30),
+            new151Exists: !!newEl,
+            new151Mes: newEl?.querySelector('.mes_text')?.textContent?.substring(0, 30),
+            totalMesElements: allMes.length,
+            lastMesId: allMes[allMes.length - 1]?.getAttribute('mesid'),
+            lastMesContent: allMes[allMes.length - 1]?.querySelector('.mes_text')?.textContent?.substring(0, 30)
+        });
         
         // Get the generated assistant message BEFORE any cleanup
         // Both user and assistant swipes now generate at the bottom (last message)
@@ -468,12 +511,29 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             }
         }
 
-        // Find and remove temp messages from chat array (DOM cleanup happens after restore)
+        // CRITICAL FIX: Remove orphaned DOM elements for both user and assistant swipes
+        // The element was created at the end, but we removed messages from chat array
+        // So we need to find and remove elements where mesid >= current chat.length
+        console.log('[Deep Swipe] Removing orphaned DOM elements');
+        const orphanedElements = document.querySelectorAll(`#chat .mes`);
+        orphanedElements.forEach(el => {
+            const mesId = parseInt(el.getAttribute('mesid'), 10);
+            if (!isNaN(mesId) && mesId >= chat.length) {
+                console.log('[Deep Swipe] Removing orphaned element at mesid', mesId);
+                el.remove();
+            }
+        });
+        
+        // Find and remove temp messages
         for (let i = chat.length - 1; i >= 0; i--) {
             if (chat[i]?.extra?.isDeepSwipeTemp) {
+                console.log(`[Deep Swipe] Removing temp message at index ${i}`);
                 chat.splice(i, 1);
             }
         }
+        
+        console.log('[Deep Swipe] After removing temp and assistant, chat length:', chat.length, 'originalMessagesAfter length:', originalMessagesAfter.length);
+        console.log('[Deep Swipe] originalTargetMessage exists:', !!originalTargetMessage, 'isUserMessage:', isUserMessage);
 
         // Try to get reasoning from stream event first (more reliable during streaming)
         if (streamingReasoningData?.reasoning) {
@@ -486,33 +546,17 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             reasoningDuration = assistantReasoningDuration;
         }
 
-        // Restore hidden messages FIRST (before restoring mesid attributes)
-        // User swipes: truncate to messageId + 1, insert after target
-        // Assistant swipes: truncate to messageId, messages after were already in chat, just need reinsertion
-        if (isUserMessage) {
-            // User swipes: insert messages after target
-            chat.splice(messageId + 1, 0, ...originalMessagesAfter);
-        } else {
-            // Assistant swipes (new flow): just re-insert messages after the target
-            // Target was never removed from DOM, only from chat array for context
-            if (originalTargetMessage) {
-                chat.splice(messageId, 0, originalTargetMessage);
-            }
-            chat.splice(messageId + 1, 0, ...originalMessagesAfter);
-        }
+        console.log('[Deep Swipe] Messages after target were never removed from chat array');
+        // CRITICAL: We kept full chat context during generation, so no restoration needed
+        // The messages were never removed, only their DOM elements were marked stale
 
         // Restore the mesid attributes after restoring messages
-        // For user swipes: restore from messageId + 1
-        // For assistant swipes: restore from messageId (target was also marked stale)
-        const restoreStartIndex = isUserMessage ? messageId + 1 : messageId;
-        for (let i = restoreStartIndex; i < 100; i++) {
-            const el = document.querySelector(`.mes[mesid="stale-${i}"]`);
-            if (el) {
-                el.setAttribute('mesid', `${i}`);
-            } else {
-                break;
-            }
-        }
+        // Both user and assistant swipes: restore ALL stale elements by their stale- prefix
+        document.querySelectorAll('.mes[mesid^="stale-"]').forEach(el => {
+            const staleId = el.getAttribute('mesid');
+            const originalId = staleId.replace('stale-', '');
+            el.setAttribute('mesid', originalId);
+        });
 
         // CRITICAL: Cancel saves after restoring chat state
         cancelDebouncedChatSave();
@@ -523,6 +567,23 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             chat.splice(tempIndexAfter, 1);
         }
 
+        // CRITICAL: Remove orphaned DOM elements without full chat reload
+        // After array cleanup and message restoration, any DOM element with mesid >= chat.length is orphaned
+        // (these were the temp message and generated assistant message)
+        const chatElement = document.getElementById('chat');
+        if (chatElement) {
+            const messageElements = chatElement.querySelectorAll('.mes');
+            messageElements.forEach(el => {
+                const mesId = parseInt(el.getAttribute('mesid'), 10);
+                // Remove if mesId is >= current chat length (orphaned element)
+                // AND the element's message no longer exists in chat
+                if (!isNaN(mesId) && mesId >= chat.length) {
+                    console.log(`[Deep Swipe] Removing orphaned DOM element for mesid ${mesId}`);
+                    el.remove();
+                }
+            });
+        }
+
         // Remove event listener
         eventSource.removeListener(event_types.STREAM_REASONING_DONE, reasoningEventHandler);
 
@@ -531,14 +592,32 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             const trimmedText = generatedText.trim();
 
             // CRITICAL FIX: For USER swipes, use the original 'message' parameter directly
-            // The 'message' parameter maintains object identity throughout the operation
-            // chat[messageId] becomes invalid after array cleanup/restore operations
-            // For assistant swipes: chat[messageId] is still valid since we didn't truncate it
-            const actualTargetMessage = isUserMessage ? message : chat[messageId];
+            // For ASSISTANT swipes, use the saved 'originalTargetMessage' reference
+            // The array index chat[messageId] may not point to the right object after restoration
+            const actualTargetMessage = isUserMessage ? message : originalTargetMessage;
             
             if (!actualTargetMessage) {
                 throw new Error(`Target message not found at index ${messageId}`);
             }
+            
+            // DEBUG: Log message identity to catch reference issues
+            console.log('[Deep Swipe] Storing swipe:', {
+                isUserMessage,
+                messageId,
+                newSwipeIndex,
+                targetMessageId: actualTargetMessage === message,
+                originalTargetMatch: actualTargetMessage === originalTargetMessage,
+                chatLength: chat.length,
+                targetName: actualTargetMessage.name,
+                targetMes: actualTargetMessage.mes?.substring(0, 30),
+                chatAtMessageId: isUserMessage ? chat[messageId]?.mes?.substring(0, 30) : 'N/A (assistant)',
+                originalTargetMes: originalTargetMessage?.mes?.substring(0, 30),
+                actualSwipesLength: actualTargetMessage.swipes?.length,
+                chatAtMessageIdSwipes: isUserMessage ? chat[messageId]?.swipes?.length : 'N/A',
+                chat0Name: chat[0]?.name,
+                chat0Mes: chat[0]?.mes?.substring(0, 30),
+                chat0Swipes: chat[0]?.swipes?.length
+            });
             
             const wasUserMessage = actualTargetMessage.is_user;
             
@@ -598,6 +677,21 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             // NOTE: We DON'T update message.extra.reasoning because we're staying on the
             // original swipe (Deep Swipe always keeps swipe visible). The new swipe's
             // reasoning is stored in swipe_info[newSwipeIndex].extra via the push above.
+            
+            // DEBUG: Verify where the swipe was stored
+            console.log('[Deep Swipe] After storing swipe:', {
+                newSwipeIndex,
+                actualTargetSwipes: actualTargetMessage.swipes?.length,
+                actualTargetMes: actualTargetMessage.mes?.substring(0, 30),
+                chatAtMessageIdSwipes: chat[messageId]?.swipes?.length,
+                chatAtMessageIdMes: chat[messageId]?.mes?.substring(0, 30),
+                chatAtMessageIdPlus1Swipes: chat[messageId + 1]?.swipes?.length,
+                chatAtMessageIdPlus1Mes: chat[messageId + 1]?.mes?.substring(0, 30),
+                targetMatchesChat: actualTargetMessage === chat[messageId],
+                targetMatchesMessageIdPlus1: actualTargetMessage === chat[messageId + 1],
+                swipe6Content: actualTargetMessage.swipes?.[6]?.substring(0, 30),
+                swipe5Content: actualTargetMessage.swipes?.[5]?.substring(0, 30)
+            });
         } else {
             throw new Error('Generation failed: no text received');
         }
@@ -675,17 +769,22 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
                 }
             }
 
-            // CRITICAL: Ensure mesid is restored on DOM element before re-rendering
-            const targetElement = document.querySelector(`.mes[data-deep-swipe-target="${messageId}"]`);
-            if (targetElement) {
-                targetElement.setAttribute('mesid', String(messageId));
-                targetElement.removeAttribute('data-deep-swipe-target');
-            }
+            // DEBUG: Check DOM state before addOneMessage
+            const allElements151 = document.querySelectorAll('.mes[mesid="151"], .mes[mesid="stale-151"]');
+            console.log('[Deep Swipe] Before addOneMessage, all 151 elements:', allElements151.length);
+            allElements151.forEach((el, i) => {
+                console.log(`  Element ${i}: mesid=${el.getAttribute('mesid')}, content=${el.querySelector('.mes_text')?.textContent?.substring(0, 30)}`);
+            });
             
+            const domElBefore = document.querySelector(`.mes[mesid="${messageId}"]`);
+            console.log('[Deep Swipe] Before addOneMessage:', {
+                messageId,
+                domElExists: !!domElBefore,
+                domElContent: domElBefore?.querySelector('.mes_text')?.textContent?.substring(0, 30),
+                targetMessageContent: targetMessage.mes?.substring(0, 30)
+            });
+
             // Re-render to show the new swipe
-            // Use a small delay to ensure DOM is ready
-            await new Promise(resolve => setTimeout(resolve, 50));
-            
             context.addOneMessage(targetMessage, {
                 type: 'swipe',
                 forceId: messageId,
@@ -700,11 +799,7 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             // Update reasoning UI for the new swipe
             if (newSwipeInfo?.extra?.reasoning) {
                 setTimeout(() => {
-                    // Safety check: ensure message element exists before updating reasoning
-                    const mesElement = document.querySelector(`.mes[mesid="${messageId}"]`);
-                    if (mesElement) {
-                        updateReasoningUI(messageId);
-                    }
+                    updateReasoningUI(messageId);
                 }, 100);
             }
         } else {
@@ -763,10 +858,6 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         // OVERWRITE any save that might have happened during generation
         // This ensures the chat is saved WITHOUT the temp messages
         await saveChatConditional();
-
-        // Reload chat to sync DOM with chat array
-        // This removes the temp message DOM elements that were cleaned up
-        await reloadCurrentChat();
 
         // Clean up event listeners on successful completion
         eventSource.removeListener(event_types.GENERATION_STOPPED, abortHandler);
