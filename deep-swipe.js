@@ -9,7 +9,7 @@
  */
 
 import { getContext } from '../../../extensions.js';
-import { Generate, eventSource, event_types, cancelDebouncedChatSave, saveChatConditional, stopGeneration } from '../../../../script.js';
+import { Generate, eventSource, event_types, cancelDebouncedChatSave, saveChatConditional, stopGeneration, reloadCurrentChat } from '../../../../script.js';
 import { updateReasoningUI, ReasoningType } from '../../../../scripts/reasoning.js';
 import { getSettings, EXTENSION_NAME } from './config.js';
 import { syncReasoningFromSwipeInfo, error, isValidMessageId } from './utils.js';
@@ -763,6 +763,10 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         // OVERWRITE any save that might have happened during generation
         // This ensures the chat is saved WITHOUT the temp messages
         await saveChatConditional();
+
+        // Reload chat to sync DOM with chat array
+        // This removes the temp message DOM elements that were cleaned up
+        await reloadCurrentChat();
 
         // Clean up event listeners on successful completion
         eventSource.removeListener(event_types.GENERATION_STOPPED, abortHandler);
