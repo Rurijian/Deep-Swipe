@@ -604,7 +604,8 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             completeSwipeOverlay,
             fadeOutAndRemoveSwipeOverlay,
             highlightLatestSwipeMessage,
-            removeSwipeOverlay
+            removeSwipeOverlay,
+            removeInlineSwipeOverlay
         } = await import('./ui.js');
 
         // Mark overlay as complete and show completion message
@@ -624,10 +625,11 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             }, 1500);
         }
         
-        // Clean up the deep swipe overlay data
+        // Clean up the deep swipe overlay data and DOM element
         if (window._deepSwipeOverlays?.[messageId]) {
             delete window._deepSwipeOverlays[messageId];
         }
+        removeInlineSwipeOverlay(messageId);
 
         // Add faint border highlight to the message with the latest swipe
         // This helps users locate the message after generation
@@ -757,13 +759,14 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             if (mesElement) {
                 mesElement.classList.remove('deep-swipe-loading');
             }
-            const { removeSwipeOverlay } = await import('./ui.js');
+            const { removeSwipeOverlay, removeInlineSwipeOverlay } = await import('./ui.js');
             removeSwipeOverlay(messageId);
             
-            // Clean up overlay data
+            // Clean up overlay data and DOM element
             if (window._deepSwipeOverlays?.[messageId]) {
                 delete window._deepSwipeOverlays[messageId];
             }
+            removeInlineSwipeOverlay(messageId);
             
             // Warn user about potential corruption
             toastr.error('Generation was cancelled by another extension. Chat may be in an inconsistent state. Please refresh if you notice issues.', 'Deep Swipe Warning');
@@ -812,13 +815,14 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             }
             
             // Remove overlay
-            const { removeSwipeOverlay } = await import('./ui.js');
+            const { removeSwipeOverlay, removeInlineSwipeOverlay } = await import('./ui.js');
             removeSwipeOverlay(messageId);
             
-            // Clean up overlay data
+            // Clean up overlay data and DOM element
             if (window._deepSwipeOverlays?.[messageId]) {
                 delete window._deepSwipeOverlays[messageId];
             }
+            removeInlineSwipeOverlay(messageId);
 
             // Revert swipe - use appropriate message reference
             const revertTarget = isUserMessage ? message : (originalTargetMessage || chat[messageId]);

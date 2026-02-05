@@ -680,6 +680,20 @@ export function removeSwipeOverlay(messageId) {
 }
 
 /**
+ * Remove the inline swipe overlay (the one inside the message for "read while generating")
+ * @param {number} messageId - The message ID
+ */
+export function removeInlineSwipeOverlay(messageId) {
+    const mesElement = document.querySelector(`.mes[mesid="${messageId}"]`);
+    if (mesElement) {
+        const overlay = mesElement.querySelector('.deep-swipe-overlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    }
+}
+
+/**
  * Remove all deep swipe UI components
  */
 export function removeAllDeepSwipeUI() {
@@ -806,23 +820,24 @@ export function onMessageRendered(messageId) {
 
     if (overlayData?.active) {
         const mesElement = document.querySelector(`.mes[mesid="${messageId}"]`);
-        const mesTextElement = mesElement?.querySelector('.mes_text');
+        const mesBlockElement = mesElement?.querySelector('.mes_block');
 
-        if (mesTextElement) {
+        if (mesBlockElement) {
             // Always remove existing overlay first (in case it was partially rendered)
-            const existingOverlay = mesTextElement.querySelector('.deep-swipe-overlay');
+            const existingOverlay = mesElement.querySelector('.deep-swipe-overlay');
             if (existingOverlay) {
                 existingOverlay.remove();
             }
 
             // Create overlay with original swipe content
+            // Position as sibling of mes_block (outside mes_text) to isolate from DOM updates
             const swipeOverlay = document.createElement('div');
             swipeOverlay.className = 'deep-swipe-overlay';
             swipeOverlay.innerHTML = overlayData.content;
 
-            // Ensure relative positioning for overlay
-            mesTextElement.style.position = 'relative';
-            mesTextElement.appendChild(swipeOverlay);
+            // Position absolutely over the message block
+            mesElement.style.position = 'relative';
+            mesBlockElement.parentNode.insertBefore(swipeOverlay, mesBlockElement.nextSibling);
         }
     }
 }
@@ -865,13 +880,13 @@ export function setupMutationObservers(context, onDeleteClick) {
                             // This is faster than waiting for CHARACTER_MESSAGE_RENDERED event
                             const overlayData = window._deepSwipeOverlays?.[messageId];
                             if (overlayData?.active) {
-                                const mesTextElement = node.querySelector('.mes_text');
-                                if (mesTextElement && !mesTextElement.querySelector('.deep-swipe-overlay')) {
+                                const mesBlockElement = node.querySelector('.mes_block');
+                                if (mesBlockElement && !node.querySelector('.deep-swipe-overlay')) {
                                     const swipeOverlay = document.createElement('div');
                                     swipeOverlay.className = 'deep-swipe-overlay';
                                     swipeOverlay.innerHTML = overlayData.content;
-                                    mesTextElement.style.position = 'relative';
-                                    mesTextElement.appendChild(swipeOverlay);
+                                    node.style.position = 'relative';
+                                    mesBlockElement.parentNode.insertBefore(swipeOverlay, mesBlockElement.nextSibling);
                                 }
                             }
                         }
