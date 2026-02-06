@@ -686,10 +686,9 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         if (generatedText && generatedText.trim()) {
             const trimmedText = generatedText.trim();
 
-            // CRITICAL FIX: For USER swipes, use the original 'message' parameter directly
-            // For ASSISTANT swipes, use the saved 'originalTargetMessage' reference
-            // The array index chat[messageId] may not point to the right object after restoration
-            const actualTargetMessage = isUserMessage ? message : originalTargetMessage;
+            // CRITICAL FIX: Use chat[messageId] which is our restored copy
+            // NOT originalTargetMessage which is a reference to SillyTavern's internal object
+            const actualTargetMessage = chat[messageId];
             
             if (!actualTargetMessage) {
                 throw new Error(`Target message not found at index ${messageId}`);
