@@ -107,6 +107,12 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     // Set to true at generation start so cleanup runs for ANY stop (overlay button or SillyTavern stop)
     let isOurGeneration = true;
 
+    // DEBUG: Log actual chat state at very start (before any modifications)
+    console.log('[Deep Swipe] ACTUAL CHAT STATE at function start:');
+    for (let i = 0; i < chat.length; i++) {
+        console.log(`[Deep Swipe]   chat[${i}]: mes="${chat[i]?.mes?.substring(0, 30)}" is_user=${chat[i]?.is_user}`);
+    }
+
     // CRITICAL: Capture ALL original data BEFORE any truncation or modifications
     // For assistant swipes, truncation removes the target, so we MUST capture first
     const currentText = message.mes;
