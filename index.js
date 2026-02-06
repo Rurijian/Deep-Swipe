@@ -4,7 +4,7 @@
  * Allows swiping (regenerating) any message in chat history, not just the last one.
  *
  * @author Rurijian
- * @version 1.5.0
+ * @version 1.5.1
  * @license MIT
  */
 
@@ -116,7 +116,6 @@ function initializeUi() {
             delete message.swipe_info[swipeId].extra.reasoning_type;
             delete message.swipe_info[swipeId].extra.reasoning_duration;
 
-            console.log(`[${EXTENSION_NAME}] Synced reasoning deletion to swipe_info[${swipeId}] for message ${messageId}`);
         }
     });
 

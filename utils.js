@@ -4,7 +4,7 @@
  * Shared helper functions used across the extension.
  *
  * @author Rurijian
- * @version 1.5.0
+ * @version 1.5.1
  * @license MIT
  */
 
@@ -184,7 +184,6 @@ export function getCurrentEditMessageId() {
  */
 export function ensureSwipes(message) {
     if (!message || typeof message !== 'object') {
-        console.trace(`[${EXTENSION_NAME}] [ensureSwipes] failed. '${message}' is not an object.`);
         return null;
     }
     if (!Array.isArray(message.swipes)) {

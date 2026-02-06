@@ -4,7 +4,7 @@
  * Slash command definitions for the extension.
  *
  * @author Rurijian
- * @version 1.5.0
+ * @version 1.5.1
  * @license MIT
  */
 
@@ -113,7 +113,7 @@ export async function registerSlashCommands(dswipeBack, dswipeForward) {
         }));
 
     } catch (error) {
-        console.error(`[${EXTENSION_NAME}] Failed to register slash commands:`, error);
+        console.error('[Deep Swipe] Failed to register slash commands:', error);
     }
 }
 
@@ -179,7 +179,7 @@ export async function handleDeleteClick(e) {
         // Update tracking
         clearEditMessage();
     } catch (error) {
-        console.error(`[${EXTENSION_NAME}] Error in delete handler:`, error);
+        console.error('[Deep Swipe] Error in delete handler:', error);
     }
 
     return false;
