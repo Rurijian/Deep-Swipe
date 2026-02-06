@@ -208,9 +208,11 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
 
     // CRITICAL FIX: Capture ALL data in ONE synchronous operation
     // SillyTavern modifies chat asynchronously, so we must capture everything immediately
+    // CRITICAL: Deep clone everything to prevent SillyTavern from corrupting our captured data
     const chatSnapshot = JSON.parse(JSON.stringify(chat));
     const capturedTargetMessage = JSON.parse(JSON.stringify(chat[messageId]));
-    const capturedMessagesAfter = chatSnapshot.slice(messageId + 1);
+    // Deep clone the messages after target - slice() only does shallow copy!
+    const capturedMessagesAfter = chatSnapshot.slice(messageId + 1).map(msg => JSON.parse(JSON.stringify(msg)));
     
     // IMMEDIATE CHECK: Log what we actually captured
     console.log('[DEEP_SWIPE_CAPTURE] ========== CAPTURED DATA ==========');
@@ -321,7 +323,19 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         // Create fresh copies to avoid any reference issues with SillyTavern
         console.log('[Deep-Swipe-Cleanup] About to restore chat - current length:', chat.length, 'capturedMessagesAfter.length:', capturedMessagesAfter.length);
         
+        // DEBUG: Check captured data before restoration
+        console.log('[Deep-Swipe-Cleanup] capturedMessagesAfter BEFORE restore:');
+        capturedMessagesAfter.forEach((msg, i) => {
+            console.log(`[Deep-Swipe-Cleanup]   capturedMessagesAfter[${i}].mes: "${msg?.mes?.substring(0, 30)}"`);
+        });
+        
         const restoredMessages = capturedMessagesAfter.map(msg => JSON.parse(JSON.stringify(msg)));
+        
+        // DEBUG: Check restored data
+        console.log('[Deep-Swipe-Cleanup] restoredMessages AFTER clone:');
+        restoredMessages.forEach((msg, i) => {
+            console.log(`[Deep-Swipe-Cleanup]   restoredMessages[${i}].mes: "${msg?.mes?.substring(0, 30)}"`);
+        });
         
         if (isUserMessage) {
             // User swipes: chat is truncated to just after target, push restored messages
