@@ -234,6 +234,10 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     // We push a temp message at the end, so these need to be re-inserted after generation
     // CRITICAL: Deep clone messages after to prevent generation/streaming from modifying them
     const originalMessagesAfter = JSON.parse(JSON.stringify(chat.slice(messageId + 1)));
+    console.log('[Deep Swipe] Captured originalMessagesAfter:', originalMessagesAfter.length, 'messages');
+    originalMessagesAfter.forEach((msg, i) => {
+        console.log(`[Deep Swipe]   Message ${i}:`, msg.mes?.substring(0, 50), 'is_user:', msg.is_user);
+    });
     // Keep reference to target message for storing the swipe (still at chat[messageId])
     // Don't clone this - we need to modify the actual message object for swipe management
     const originalTargetMessage = chat[messageId];
@@ -328,6 +332,10 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             chat.push(...originalMessagesAfter);
         }
         console.log('[Deep-Swipe-Cleanup] After chat restore - chat.length:', chat.length);
+        console.log('[Deep-Swipe-Cleanup] Restored messages content:');
+        for (let i = messageId + 1; i < chat.length; i++) {
+            console.log(`[Deep-Swipe-Cleanup]   chat[${i}]:`, chat[i]?.mes?.substring(0, 50), 'is_user:', chat[i]?.is_user);
+        }
         
         // CRITICAL: Remove only stale/dangling DOM elements
         // Don't remove valid messages - let addOneMessage handle re-rendering
