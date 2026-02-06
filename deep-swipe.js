@@ -180,77 +180,47 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     // Show waiting toast
     const waitingToast = toastr.info('Generating Deep Swipe...', 'Deep Swipe', { timeOut: 0, extendedTimeOut: 0 });
 
-    // DEBUG: Log initial state
+    // CRITICAL FIX: Capture ALL data in ONE synchronous operation
+    // SillyTavern modifies chat asynchronously, so we must capture everything immediately
+    const chatSnapshot = JSON.parse(JSON.stringify(chat));
+    const capturedTargetMessage = JSON.parse(JSON.stringify(chat[messageId]));
+    const capturedMessagesAfter = chatSnapshot.slice(messageId + 1);
+    
     console.log('[Deep Swipe] Starting generation:', {
         isUserMessage,
         messageId,
         chatLength: chat.length,
-        messageObject: message?.mes?.substring(0, 30),
-        chatAtMessageId: chat[messageId]?.mes?.substring(0, 30),
-        messageIsChat: message === chat[messageId],
-        messageName: message?.name,
-        chatAtMessageIdName: chat[messageId]?.name
+        capturedMessages: capturedMessagesAfter.length
     });
     
-    // DEBUG: Log ALL messages after messageId to see if any are corrupted
-    console.log('[Deep Swipe] Full chat state check (messages after messageId):');
-    for (let i = messageId + 1; i < chat.length; i++) {
-        console.log(`[Deep Swipe]   chat[${i}]: mes="${chat[i]?.mes?.substring(0, 30)}" is_user=${chat[i]?.is_user}`);
-    }
+    // DEBUG: Log captured messages
+    console.log('[Deep Swipe] Captured messages after messageId:', capturedMessagesAfter.length);
+    capturedMessagesAfter.forEach((msg, i) => {
+        console.log(`[Deep Swipe]   Captured [${i}]: mes="${msg.mes?.substring(0, 30)}" is_user=${msg.is_user}`);
+    });
     
     // For USER swipes: Add placeholder now (message won't change)
     // For ASSISTANT swipes: Add placeholder now too (both use same flow now)
     let newSwipeIndex;
-    if (isUserMessage) {
-        // CRITICAL FIX: Store a unique identifier for the target message
-        // The array index becomes invalid after cleanup/restore operations
-        // because the chat array gets completely rebuilt
-        const targetMessageObject = message; // Keep reference to original object
-        
-        if (!Array.isArray(targetMessageObject.swipes)) {
-            targetMessageObject.swipes = [targetMessageObject.mes];
-            targetMessageObject.swipe_id = 0;
-        }
-        targetMessageObject.swipes.push('');
-        newSwipeIndex = targetMessageObject.swipes.length - 1;
-        // CRITICAL: Do NOT update swipe_id here - keep showing original swipe during generation
-        // The new swipe is stored but not displayed until user navigates to it
-        
-    } else {
-        // ASSISTANT swipes: Also need to initialize newSwipeIndex
-        const targetMessageObject = chat[messageId];
-        
-        if (!Array.isArray(targetMessageObject.swipes)) {
-            targetMessageObject.swipes = [targetMessageObject.mes];
-            targetMessageObject.swipe_id = 0;
-        }
-        targetMessageObject.swipes.push('');
-        newSwipeIndex = targetMessageObject.swipes.length - 1;
-        // CRITICAL: Do NOT update swipe_id here - keep showing original swipe during generation
-        // The new swipe is stored but not displayed until user navigates to it
+    
+    // Initialize swipes on the working copy (not the original)
+    if (!Array.isArray(capturedTargetMessage.swipes)) {
+        capturedTargetMessage.swipes = [capturedTargetMessage.mes];
+        capturedTargetMessage.swipe_id = 0;
     }
-
+    // Add placeholder for the new swipe
+    capturedTargetMessage.swipes.push('');
+    newSwipeIndex = capturedTargetMessage.swipes.length - 1;
+    // CRITICAL: Do NOT update swipe_id here - keep showing original swipe during generation
+    
     // Variables to capture reasoning data
     let capturedReasoning = '';
     let reasoningDuration = null;
     let generationStarted = null;
     let generationFinished = null;
-
-    // Save original messages after target BEFORE any modifications
-    // We push a temp message at the end, so these need to be re-inserted after generation
-    // CRITICAL: Deep clone messages after to prevent generation/streaming from modifying them
-    const rawSlice = chat.slice(messageId + 1);
-    console.log('[Deep Swipe] Raw chat.slice:', rawSlice.length, 'messages');
-    rawSlice.forEach((msg, i) => {
-        console.log(`[Deep Swipe]   Raw [${i}]:`, msg?.mes?.substring(0, 50), 'is_user:', msg?.is_user);
-    });
-    const originalMessagesAfter = JSON.parse(JSON.stringify(rawSlice));
-    console.log('[Deep Swipe] Captured originalMessagesAfter:', originalMessagesAfter.length, 'messages');
-    originalMessagesAfter.forEach((msg, i) => {
-        console.log(`[Deep Swipe]   Captured [${i}]:`, msg.mes?.substring(0, 50), 'is_user:', msg.is_user);
-    });
-    // Keep reference to target message for storing the swipe (still at chat[messageId])
-    // Don't clone this - we need to modify the actual message object for swipe management
+    
+    // Keep reference to original target message for swipe updates during generation
+    // But use capturedTargetMessage for cleanup restoration
     const originalTargetMessage = chat[messageId];
 
     // Set up event listener to capture reasoning from streaming
@@ -309,38 +279,24 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         }
         console.log('[Deep-Swipe-Cleanup] After temp/dangling removal - chat.length:', chat.length);
         
-        // Revert swipe data BEFORE restoring chat (we still have the message reference)
-        const targetMessage = isUserMessage ? message : originalTargetMessage;
-        console.log('[Deep-Swipe-Cleanup] Target message found:', !!targetMessage, 'isUserMessage:', isUserMessage);
-        if (targetMessage) {
-            console.log('[Deep-Swipe-Cleanup] Reverting swipe data - current swipes.length:', targetMessage.swipes?.length, 'swipe_id:', targetMessage.swipe_id);
-            // Remove the empty swipe we added for generation
-            if (targetMessage.swipes.length > 0) {
-                targetMessage.swipes.pop();
-            }
-            if (targetMessage.swipe_info && targetMessage.swipe_info.length > 0) {
-                targetMessage.swipe_info.pop();
-            }
-            // Reset to previous swipe
-            targetMessage.swipe_id = Math.max(0, targetMessage.swipes.length - 1);
-            // Restore the original text
-            targetMessage.mes = targetMessage.swipes[targetMessage.swipe_id] || currentText;
-            console.log('[Deep-Swipe-Cleanup] After revert - swipes.length:', targetMessage.swipes.length, 'swipe_id:', targetMessage.swipe_id);
-        }
+        // CRITICAL FIX: Use captured copies, not references
+        // Create fresh copies to avoid any reference issues with SillyTavern
+        console.log('[Deep-Swipe-Cleanup] About to restore chat - current length:', chat.length, 'capturedMessagesAfter.length:', capturedMessagesAfter.length);
         
-        // CRITICAL: Restore chat array - push target and messages after
-        // Chat was already truncated to remove temp message and dangling messages
-        console.log('[Deep-Swipe-Cleanup] About to restore chat - current length:', chat.length, 'originalMessagesAfter.length:', originalMessagesAfter.length);
+        const restoredMessages = capturedMessagesAfter.map(msg => JSON.parse(JSON.stringify(msg)));
+        
         if (isUserMessage) {
-            // User swipes: chat is truncated to just after target, push original messages after
-            chat.push(...originalMessagesAfter);
+            // User swipes: chat is truncated to just after target, push restored messages
+            chat.push(...restoredMessages);
         } else {
-            // Assistant swipes: chat is truncated to before target, push target + messages after
-            if (originalTargetMessage) {
-                console.log('[Deep-Swipe-Cleanup] Pushing originalTargetMessage');
-                chat.push(originalTargetMessage);
-            }
-            chat.push(...originalMessagesAfter);
+            // Assistant swipes: chat is truncated to before target, push captured target + messages after
+            const restoredTarget = JSON.parse(JSON.stringify(capturedTargetMessage));
+            // Remove the placeholder swipe we added for generation
+            restoredTarget.swipes.pop();
+            restoredTarget.swipe_id = Math.max(0, restoredTarget.swipes.length - 1);
+            restoredTarget.mes = restoredTarget.swipes[restoredTarget.swipe_id];
+            chat.push(restoredTarget);
+            chat.push(...restoredMessages);
         }
         console.log('[Deep-Swipe-Cleanup] After chat restore - chat.length:', chat.length);
         console.log('[Deep-Swipe-Cleanup] Restored messages content:');
@@ -652,7 +608,7 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             }
         }
         
-        console.log('[Deep Swipe] After removing temp and assistant, chat length:', chat.length, 'originalMessagesAfter length:', originalMessagesAfter.length);
+        console.log('[Deep Swipe] After removing temp and assistant, chat length:', chat.length, 'capturedMessagesAfter length:', capturedMessagesAfter.length);
         console.log('[Deep Swipe] originalTargetMessage exists:', !!originalTargetMessage, 'isUserMessage:', isUserMessage);
 
         // Try to get reasoning from stream event first (more reliable during streaming)
@@ -670,13 +626,17 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         // We truncated the chat during generation, now restore the original messages
         if (isUserMessage) {
             // User swipes: insert messages after target (target was kept at messageId)
-            chat.splice(messageId + 1, 0, ...originalMessagesAfter);
+            // Restore from captured copies
+            const restoredMessages = capturedMessagesAfter.map(msg => JSON.parse(JSON.stringify(msg)));
+            chat.splice(messageId + 1, 0, ...restoredMessages);
         } else {
             // Assistant swipes: re-insert target and messages after it
             if (originalTargetMessage) {
                 chat.splice(messageId, 0, originalTargetMessage);
             }
-            chat.splice(messageId + 1, 0, ...originalMessagesAfter);
+            // Restore from captured copies
+            const restoredMessages = capturedMessagesAfter.map(msg => JSON.parse(JSON.stringify(msg)));
+            chat.splice(messageId + 1, 0, ...restoredMessages);
         }
 
         // Restore the mesid attributes after restoring messages
@@ -1025,14 +985,18 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             if (isUserMessage) {
                 // User swipes: restore to messageId + 1
                 chat.length = messageId + 1;
-                chat.splice(messageId + 1, 0, ...originalMessagesAfter);
+                // Restore from captured copies
+                const restoredMessages = capturedMessagesAfter.map(msg => JSON.parse(JSON.stringify(msg)));
+                chat.splice(messageId + 1, 0, ...restoredMessages);
             } else {
                 // Assistant swipes: restore target message and messages after
                 chat.length = messageId;
                 if (originalTargetMessage) {
                     chat.push(originalTargetMessage);
                 }
-                chat.splice(messageId + 1, 0, ...originalMessagesAfter);
+                // Restore from captured copies
+                const restoredMessages = capturedMessagesAfter.map(msg => JSON.parse(JSON.stringify(msg)));
+                chat.splice(messageId + 1, 0, ...restoredMessages);
             }
             
             // Restore mesid attributes
