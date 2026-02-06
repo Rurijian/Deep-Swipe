@@ -1009,11 +1009,20 @@ export async function dswipeBack(args, messageId) {
     const currentId = message.swipe_id || 0;
     const targetSwipeId = Math.max(0, currentId - 1);
 
-    // For user messages, use manual handling
+    // For user messages, manually update swipe (same as UI button)
     if (message.is_user) {
-        const messagesToRestore = chat.slice(messageId + 1);
-        chat.length = messageId + 1;
-        await handleUserSwipeBack(message, messageId, targetSwipeId, messagesToRestore);
+        message.swipe_id = targetSwipeId;
+        message.mes = message.swipes[targetSwipeId];
+        syncReasoningFromSwipeInfo(message, targetSwipeId);
+        
+        context.addOneMessage(message, {
+            type: 'swipe',
+            forceId: messageId,
+            scroll: false,
+            showSwipes: true
+        });
+        
+        updateMessageSwipeUI(messageId);
         return `Navigated to swipe ${message.swipe_id + 1}/${message.swipes.length}`;
     }
 
@@ -1029,15 +1038,27 @@ export async function dswipeBack(args, messageId) {
         });
 
         chat.push(...messagesToRestore);
+        
+        // Check if native swipe worked correctly
+        const updatedMsg = chat[messageId];
+        if (updatedMsg.swipe_id !== targetSwipeId) {
+            updatedMsg.swipe_id = targetSwipeId;
+            updatedMsg.mes = updatedMsg.swipes[targetSwipeId];
+        }
+        
+        // Sync reasoning from swipe_info
+        syncReasoningFromSwipeInfo(updatedMsg, targetSwipeId);
 
-        context.addOneMessage(message, {
+        context.addOneMessage(updatedMsg, {
             type: 'swipe',
             forceId: messageId,
             scroll: false,
             showSwipes: true
         });
+        
+        updateMessageSwipeUI(messageId);
 
-        return `Navigated to swipe ${message.swipe_id + 1}/${message.swipes.length}`;
+        return `Navigated to swipe ${updatedMsg.swipe_id + 1}/${updatedMsg.swipes.length}`;
     } catch (err) {
         chat.push(...messagesToRestore);
         throw err;
@@ -1060,24 +1081,77 @@ export async function dswipeForward(args, messageId) {
     }
 
     const message = chat[messageId];
-    const settings = getSettings();
 
+    // Check if there are existing swipes to navigate forward to
+    const currentSwipeId = message.swipe_id || 0;
+    const totalSwipes = message.swipes?.length || 1;
+    
+    // If we're not at the last swipe, navigate forward instead of generating
+    if (currentSwipeId < totalSwipes - 1) {
+        const targetSwipeId = currentSwipeId + 1;
+        
+        // For user messages, manually update swipe (same as UI button)
+        if (message.is_user) {
+            message.swipe_id = targetSwipeId;
+            message.mes = message.swipes[targetSwipeId];
+            syncReasoningFromSwipeInfo(message, targetSwipeId);
+            
+            context.addOneMessage(message, {
+                type: 'swipe',
+                forceId: messageId,
+                scroll: false,
+                showSwipes: true
+            });
+            
+            updateMessageSwipeUI(messageId);
+            return `Navigated to swipe ${message.swipe_id + 1}/${message.swipes.length}`;
+        }
+        
+        // For assistant messages, use native swipe
+        const messagesToRestore = chat.slice(messageId + 1);
+        chat.length = messageId + 1;
+
+        try {
+            await context.swipe.right(null, {
+                message: message,
+                forceMesId: messageId,
+                forceSwipeId: targetSwipeId
+            });
+
+            chat.push(...messagesToRestore);
+            
+            // Check if native swipe worked correctly
+            const updatedMsg = chat[messageId];
+            if (updatedMsg.swipe_id !== targetSwipeId) {
+                updatedMsg.swipe_id = targetSwipeId;
+                updatedMsg.mes = updatedMsg.swipes[targetSwipeId];
+            }
+            
+            // Sync reasoning from swipe_info
+            syncReasoningFromSwipeInfo(updatedMsg, targetSwipeId);
+
+            context.addOneMessage(updatedMsg, {
+                type: 'swipe',
+                forceId: messageId,
+                scroll: false,
+                showSwipes: true
+            });
+            
+            updateMessageSwipeUI(messageId);
+
+            return `Navigated to swipe ${updatedMsg.swipe_id + 1}/${updatedMsg.swipes.length}`;
+        } catch (err) {
+            chat.push(...messagesToRestore);
+            throw err;
+        }
+    }
+    
+    // No more swipes to navigate to - generate a new one
     if (message.is_user) {
-        // User message: use deep swipe generation
         await generateMessageSwipe(message, messageId, context);
         return 'Generated new swipe';
     }
 
-    // Assistant message: use deep swipe generation for non-last messages
-    // Native swipe only works on the last message
-    if (messageId !== chat.length - 1) {
-        // Use our generateMessageSwipe function
-        await generateMessageSwipe(message, messageId, context, false);
-        return 'Generated new swipe';
-    }
-    
-    // For the last assistant message, we could use native swipe
-    // But let's use generateMessageSwipe for consistency
     await generateMessageSwipe(message, messageId, context, false);
     return 'Generated new swipe';
 }

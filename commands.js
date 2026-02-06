@@ -36,21 +36,47 @@ export async function registerSlashCommands(dswipeBack, dswipeForward) {
                 new SlashCommandArgument('messageId', ARGUMENT_TYPE.NUMBER, true, 'Message ID'),
             ],
             callback: async (args, action, messageId) => {
+                // DEBUG: Log what we received
+                console.log('[Deep Swipe] /dswipe callback received:', { args, action, messageId, type: typeof messageId });
+                
+                // Handle splitUnnamedArgument - action might be an array with both values
+                let actualAction = action;
+                let actualMessageId = messageId;
+                
+                if (Array.isArray(action) && action.length >= 2) {
+                    actualAction = action[0];
+                    actualMessageId = action[1];
+                } else if (Array.isArray(action) && action.length === 1) {
+                    actualAction = action[0];
+                }
+                
+                console.log('[Deep Swipe] Extracted:', { actualAction, actualMessageId });
+                
                 const settings = getSettings();
                 if (!settings?.enabled) {
                     toastr.warning('Deep Swipe is disabled.', 'Deep Swipe');
                     return 'Extension disabled';
                 }
 
-                const id = parseInt(messageId, 10);
-                if (isNaN(id)) {
-                    toastr.error('Message ID must be a valid number', 'Deep Swipe');
-                    return 'Invalid message ID';
+                const context = getContext();
+                const chat = context.chat;
+                let id;
+
+                if (actualMessageId === undefined || actualMessageId === null || actualMessageId === '') {
+                    // Default to last message
+                    id = chat.length - 1;
+                } else {
+                    id = parseInt(actualMessageId, 10);
+                    console.log('[Deep Swipe] Parsed ID:', id, 'from actualMessageId:', actualMessageId);
+                    if (isNaN(id)) {
+                        toastr.error('Message ID must be a valid number', 'Deep Swipe');
+                        return 'Invalid message ID';
+                    }
                 }
 
-                if (action === 'back') {
+                if (actualAction === 'back') {
                     return await dswipeBack(args, id);
-                } else if (action === 'forward') {
+                } else if (actualAction === 'forward') {
                     return await dswipeForward(args, id);
                 } else {
                     toastr.error('Action must be "back" or "forward"', 'Deep Swipe');
