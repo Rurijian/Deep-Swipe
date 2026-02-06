@@ -303,9 +303,17 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         // SIMPLE APPROACH: Just restore the entire chat from backup
         if (chatBackupBeforeGeneration) {
             console.log('[Deep-Swipe-Cleanup] Restoring entire chat from backup...');
+            console.log('[Deep-Swipe-Cleanup] Backup contents:');
+            chatBackupBeforeGeneration.forEach((msg, i) => {
+                console.log(`[Deep-Swipe-Cleanup]   backup[${i}]: mes="${msg?.mes?.substring(0, 30)}"`);
+            });
             chat.length = 0;
             chat.push(...JSON.parse(JSON.stringify(chatBackupBeforeGeneration)));
             console.log('[Deep-Swipe-Cleanup] Chat restored, length:', chat.length);
+            console.log('[Deep-Swipe-Cleanup] Restored chat contents:');
+            chat.forEach((msg, i) => {
+                console.log(`[Deep-Swipe-Cleanup]   chat[${i}]: mes="${msg?.mes?.substring(0, 30)}"`);
+            });
         } else {
             console.error('[Deep-Swipe-Cleanup] No backup available!');
         }
