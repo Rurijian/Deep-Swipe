@@ -333,8 +333,8 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         }
         console.log('[Deep-Swipe-Cleanup] After chat restore - chat.length:', chat.length);
         console.log('[Deep-Swipe-Cleanup] Restored messages content:');
-        for (let i = messageId + 1; i < chat.length; i++) {
-            console.log(`[Deep-Swipe-Cleanup]   chat[${i}]:`, chat[i]?.mes?.substring(0, 50), 'is_user:', chat[i]?.is_user);
+        for (let i = 0; i < chat.length; i++) {
+            console.log(`[Deep-Swipe-Cleanup]   chat[${i}]: mes="${chat[i]?.mes?.substring(0, 30)}" is_user=${chat[i]?.is_user} name="${chat[i]?.name}" extra=${JSON.stringify(chat[i]?.extra)?.substring(0, 50)}`);
         }
         
         // CRITICAL: Remove only stale/dangling DOM elements
@@ -381,8 +381,10 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         console.log('[Deep-Swipe-Cleanup] All .mes elements after cleanup:', allMesAfter.length);
         allMesAfter.forEach(el => {
             const mesid = el.getAttribute('mesid');
-            const text = el.querySelector('.mes_text')?.textContent?.substring(0, 30);
-            console.log('[Deep-Swipe-Cleanup]   mesid:', mesid, '- text:', text);
+            const mesTextEl = el.querySelector('.mes_text');
+            const text = mesTextEl?.textContent?.substring(0, 50);
+            const html = mesTextEl?.innerHTML?.substring(0, 50);
+            console.log('[Deep-Swipe-Cleanup]   mesid:', mesid, '- text:', text, '- html:', html);
         });
         
         console.log('[Deep-Swipe-Cleanup] === ABORT CLEANUP COMPLETE ===');
