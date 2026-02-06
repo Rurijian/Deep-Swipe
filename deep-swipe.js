@@ -11,7 +11,7 @@
 import { getContext } from '../../../extensions.js';
 import { Generate, eventSource, event_types, cancelDebouncedChatSave, saveChatConditional, stopGeneration } from '../../../../script.js';
 import { updateReasoningUI, ReasoningType } from '../../../../scripts/reasoning.js';
-import { getSettings, EXTENSION_NAME } from './config.js';
+import { getSettings, EXTENSION_NAME, DEFAULT_ASSISTANT_PROMPT } from './config.js';
 import { syncReasoningFromSwipeInfo, error, isValidMessageId } from './utils.js';
 import { updateMessageSwipeUI } from './ui.js';
 
@@ -419,10 +419,11 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             }
             
             // Append temp user message (now at position messageId)
+            const assistantPrompt = settings?.assistantPrompt || DEFAULT_ASSISTANT_PROMPT;
             const tempContextMessage = {
                 name: userName,
                 is_user: true,
-                mes: '[Continuing conversation...]',
+                mes: assistantPrompt,
                 send_date: new Date().toISOString(),
                 extra: { isSmallSys: true, isDeepSwipeTemp: true },
             };
