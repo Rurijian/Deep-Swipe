@@ -262,8 +262,7 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         eventSource.removeListener(event_types.GENERATION_STOPPED, abortHandler);
         console.log('[Deep-Swipe-Cleanup] Event listeners removed');
         
-        // CRITICAL: First, find and remove the dangling assistant message if it exists
-        // This is the partially-generated message that was being streamed
+        // CRITICAL: First, find and remove temp message and any dangling messages after it
         let tempMessageIndex = -1;
         for (let i = chat.length - 1; i >= 0; i--) {
             if (chat[i]?.extra?.isDeepSwipeTemp) {
@@ -273,20 +272,13 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         }
         console.log('[Deep-Swipe-Cleanup] Temp message index found:', tempMessageIndex);
         
-        // If temp message exists and there's an assistant message after it, that's the dangling one
-        if (tempMessageIndex !== -1 && tempMessageIndex < chat.length - 1) {
-            console.log('[Deep-Swipe-Cleanup] Found temp message, checking for dangling messages after it');
-            // Check all messages after temp message - they are dangling/partial
-            for (let i = chat.length - 1; i > tempMessageIndex; i--) {
-                const msg = chat[i];
-                console.log('[Deep-Swipe-Cleanup] Checking message at index', i, '- is_user:', msg?.is_user, 'isDeepSwipeTemp:', msg?.extra?.isDeepSwipeTemp, 'mes preview:', msg?.mes?.substring(0, 30));
-                if (msg && !msg.is_user && !msg.extra?.isDeepSwipeTemp) {
-                    console.log('[Deep-Swipe-Cleanup] REMOVING dangling assistant message at index', i, ':', msg.mes?.substring(0, 50));
-                    chat.splice(i, 1);
-                }
-            }
+        // If temp message exists, remove it and any messages after it (they're all dangling/partial)
+        if (tempMessageIndex !== -1) {
+            console.log('[Deep-Swipe-Cleanup] Truncating chat to remove temp and dangling messages at/after index:', tempMessageIndex);
+            // Truncate to remove temp message and everything after it
+            chat.length = tempMessageIndex;
         }
-        console.log('[Deep-Swipe-Cleanup] After dangling removal - chat.length:', chat.length);
+        console.log('[Deep-Swipe-Cleanup] After temp/dangling removal - chat.length:', chat.length);
         
         // Revert swipe data BEFORE restoring chat (we still have the message reference)
         const targetMessage = isUserMessage ? message : originalTargetMessage;
@@ -307,17 +299,14 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             console.log('[Deep-Swipe-Cleanup] After revert - swipes.length:', targetMessage.swipes.length, 'swipe_id:', targetMessage.swipe_id);
         }
         
-        // CRITICAL: Restore chat array - truncate and rebuild
-        console.log('[Deep-Swipe-Cleanup] About to restore chat - originalMessagesAfter.length:', originalMessagesAfter.length);
+        // CRITICAL: Restore chat array - push target and messages after
+        // Chat was already truncated to remove temp message and dangling messages
+        console.log('[Deep-Swipe-Cleanup] About to restore chat - current length:', chat.length, 'originalMessagesAfter.length:', originalMessagesAfter.length);
         if (isUserMessage) {
-            // User swipes: truncate to messageId + 1 (keep target), then restore messages after
-            console.log('[Deep-Swipe-Cleanup] User swipe - truncating to messageId + 1:', messageId + 1);
-            chat.length = messageId + 1;
+            // User swipes: chat is truncated to just after target, push original messages after
             chat.push(...originalMessagesAfter);
         } else {
-            // Assistant swipes: truncate to messageId (target was removed), restore target + messages after
-            console.log('[Deep-Swipe-Cleanup] Assistant swipe - truncating to messageId:', messageId);
-            chat.length = messageId;
+            // Assistant swipes: chat is truncated to before target, push target + messages after
             if (originalTargetMessage) {
                 console.log('[Deep-Swipe-Cleanup] Pushing originalTargetMessage');
                 chat.push(originalTargetMessage);
