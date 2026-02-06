@@ -9,7 +9,6 @@
  */
 
 import { extension_settings } from '../../../extensions.js';
-import { saveSettingsDebounced } from '../../../../script.js';
 
 /**
  * Extension name identifier
@@ -122,10 +121,12 @@ export function getSettings() {
  * @param {string} key - The setting key to update
  * @param {*} value - The new value
  */
-export function updateSetting(key, value) {
+export async function updateSetting(key, value) {
     if (!extension_settings[EXTENSION_NAME]) {
         extension_settings[EXTENSION_NAME] = { ...defaultSettings };
     }
     extension_settings[EXTENSION_NAME][key] = value;
+    // Dynamic import to avoid loading script.js at module initialization
+    const { saveSettingsDebounced } = await import('../../../../script.js');
     saveSettingsDebounced();
 }
