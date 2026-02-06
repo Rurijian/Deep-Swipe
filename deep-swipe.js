@@ -186,6 +186,12 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     const capturedTargetMessage = JSON.parse(JSON.stringify(chat[messageId]));
     const capturedMessagesAfter = chatSnapshot.slice(messageId + 1);
     
+    // IMMEDIATE CHECK: Log what we actually captured
+    console.log('[Deep Swipe] IMMEDIATE CHECK after capture:');
+    for (let i = 0; i < chatSnapshot.length; i++) {
+        console.log(`[Deep Swipe]   chatSnapshot[${i}]: mes="${chatSnapshot[i]?.mes?.substring(0, 30)}"`);
+    }
+    
     console.log('[Deep Swipe] Starting generation:', {
         isUserMessage,
         messageId,
