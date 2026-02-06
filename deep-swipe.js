@@ -121,10 +121,14 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     
     // CRITICAL FIX: Reload chat from server to ensure clean state
     // This prevents using corrupted data from previous runs
-    console.log('[DEEP_SWIPE_START] Reloading chat from server to ensure clean state...');
+    const chatLengthBeforeReload = chat.length;
+    console.log('[DEEP_SWIPE_START] Reloading chat from server... Current length:', chatLengthBeforeReload);
     try {
         await context.reloadCurrentChat();
-        console.log('[DEEP_SWIPE_START] Chat reloaded successfully');
+        console.log('[DEEP_SWIPE_START] Chat reloaded. Length before:', chatLengthBeforeReload, 'Length after:', chat.length);
+        if (chat.length === chatLengthBeforeReload) {
+            console.log('[DEEP_SWIPE_START] WARNING: Chat length unchanged after reload');
+        }
     } catch (reloadError) {
         console.error('[DEEP_SWIPE_START] Failed to reload chat:', reloadError);
     }
