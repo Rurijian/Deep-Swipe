@@ -119,26 +119,6 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
     }
     console.log('[DEEP_SWIPE_START] ========== END START STATE ==========');
     
-    // CRITICAL FIX: Reload chat from server to ensure clean state
-    // This prevents using corrupted data from previous runs
-    const chatLengthBeforeReload = chat.length;
-    console.log('[DEEP_SWIPE_START] Reloading chat from server... Current length:', chatLengthBeforeReload);
-    try {
-        await context.reloadCurrentChat();
-        console.log('[DEEP_SWIPE_START] Chat reloaded. Length before:', chatLengthBeforeReload, 'Length after:', chat.length);
-        if (chat.length === chatLengthBeforeReload) {
-            console.log('[DEEP_SWIPE_START] WARNING: Chat length unchanged after reload');
-        }
-    } catch (reloadError) {
-        console.error('[DEEP_SWIPE_START] Failed to reload chat:', reloadError);
-    }
-    
-    // Log state after reload
-    console.log('[DEEP_SWIPE_START] Chat state after reload:');
-    for (let i = 0; i < chat.length; i++) {
-        console.log(`[DEEP_SWIPE_START] chat[${i}]: mes="${chat[i]?.mes?.substring(0, 30)}"`);
-    }
-    
     // CRITICAL FIX: Save complete chat backup before any modifications
     // This ensures we have a clean state to restore from if stop occurs
     chatBackupBeforeGeneration = JSON.parse(JSON.stringify(chat));
