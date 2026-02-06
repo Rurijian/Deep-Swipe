@@ -4,7 +4,7 @@
  * DOM manipulation and swipe navigation UI components.
  *
  * @author Rurijian
- * @version 1.5.1
+ * @version 1.5.3
  * @license MIT
  */
 
@@ -231,10 +231,10 @@ export function addSwipeNavigationToMessage(messageId) {
         });
     }
 
-    // Right arrow (next/generate) - use native swipe_right class for consistent styling
+    // Right arrow (next/generate) - avoid swipe_right to prevent native conflicts
     const rightArrow = document.createElement('div');
     if (!rightArrow) return; // Safety check
-    rightArrow.className = 'swipe_right deep-swipe-right fa-solid fa-chevron-right';
+    rightArrow.className = 'deep-swipe-right fa-solid fa-chevron-right';
     // Add assistant-swipe-arrow class for assistant messages to position them correctly
     if (!message.is_user) {
         rightArrow.classList.add('assistant-swipe-arrow');

@@ -4,7 +4,7 @@
  * Contains constants, default settings, and settings management.
  *
  * @author Rurijian
- * @version 1.5.1
+ * @version 1.5.3
  * @license MIT
  */
 

@@ -319,6 +319,7 @@
 /* Deep Swipe Navigation - Using native swipe classes for consistent styling */
 .deep-swipe-left {
     /* Inherits native .swipe_left styling, just adds our custom class for targeting */
+    cursor: pointer;
 }
 
 /* Left arrow positioned OUTSIDE mes_block, at bottom left near avatar */
@@ -336,6 +337,7 @@
     color: var(--body-text-color, #ccc);
     opacity: 0.5;
     transition: opacity 0.2s ease;
+    cursor: pointer;
 }
 
 /* Ensure the message element has relative positioning for absolute child */
@@ -358,14 +360,15 @@
 
 .deep-swipe-right {
     /* Inherits native .swipe_right styling, just adds our custom class for targeting */
+    cursor: pointer;
 }
 
 /* IMPORTANT: Override native SillyTavern hiding behavior for our extension */
 /* SillyTavern hides .swipe_left, .swipe_right, .swipes-counter on non-last messages */
 /* We need to show our navigation on user messages regardless of position */
 /* Use higher specificity selectors to override native rules */
-body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-left.swipe_left:not(.disabled),
-body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-right.swipe_right {
+body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-left:not(.disabled),
+body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-right {
     opacity: 0.5 !important;
     visibility: visible !important;
     display: flex !important;
@@ -373,7 +376,7 @@ body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-right.swipe_right {
 }
 
 /* Disabled left arrow - hide completely when only one swipe */
-body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-left.disabled.swipe_left {
+body:not(.swipeAllMessages) .mes:not(.last_mes) .deep-swipe-left.disabled {
     opacity: 0 !important;
     visibility: hidden !important;
     display: none !important;
@@ -406,7 +409,7 @@ body:not(.swipeAllMessages) .mes:not(.last_mes) .swipeRightBlock .swipes-counter
 
 /* CRITICAL: Override the specific native rule that hides .swipe_left on messages without swipes_visible class */
 /* Use body prefix for higher specificity */
-body .mes:not(.swipes_visible) .deep-swipe-left.swipe_left:not(.disabled) {
+body .mes:not(.swipes_visible) .deep-swipe-left:not(.disabled) {
     opacity: 0.5 !important;
     visibility: visible !important;
     display: flex !important;
@@ -414,7 +417,7 @@ body .mes:not(.swipes_visible) .deep-swipe-left.swipe_left:not(.disabled) {
 }
 
 /* Disabled state - must override the above rule with higher specificity */
-body .mes:not(.swipes_visible) .deep-swipe-left.disabled.swipe_left {
+body .mes:not(.swipes_visible) .deep-swipe-left.disabled {
     opacity: 0 !important;
     cursor: not-allowed !important;
     pointer-events: none !important;
@@ -422,7 +425,7 @@ body .mes:not(.swipes_visible) .deep-swipe-left.disabled.swipe_left {
     display: none !important;
 }
 
-body .mes:not(.swipes_visible, .last_swipe) .deep-swipe-right.swipe_right {
+body .mes:not(.swipes_visible, .last_swipe) .deep-swipe-right {
     opacity: 0.5 !important;
     visibility: visible !important;
     display: flex !important;
@@ -430,8 +433,8 @@ body .mes:not(.swipes_visible, .last_swipe) .deep-swipe-right.swipe_right {
 }
 
 /* Additional override for any other hiding rules */
-body:not(.swipeAllMessages) .mes .deep-swipe-left.swipe_left,
-body:not(.swipeAllMessages) .mes .deep-swipe-right.swipe_right {
+body:not(.swipeAllMessages) .mes .deep-swipe-left,
+body:not(.swipeAllMessages) .mes .deep-swipe-right {
     opacity: 0.5 !important;
     visibility: visible !important;
     display: flex !important;
@@ -452,6 +455,7 @@ body:not(.swipeAllMessages) .mes .deep-swipe-right.swipe_right {
     color: var(--body-text-color, #ccc);
     opacity: 0.5;
     transition: opacity 0.2s ease;
+    cursor: pointer;
 }
 
 /* User message counter - match native counter color */
@@ -464,6 +468,7 @@ body:not(.swipeAllMessages) .mes .deep-swipe-right.swipe_right {
     position: relative;
     right: 0;
     bottom: 0;
+    cursor: pointer;
 }
 
 .deep-swipe-right.assistant-swipe-arrow:hover {

@@ -4,7 +4,7 @@
  * Handles swipe generation and navigation for user messages using guided impersonation.
  *
  * @author Rurijian
- * @version 1.5.1
+ * @version 1.5.3
  * @license MIT
  */
 

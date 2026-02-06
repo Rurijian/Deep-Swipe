@@ -2,6 +2,14 @@
 
 All notable changes to the Deep Swipe extension will be documented in this file.
 
+## [1.5.3] - 2026-02-06
+
+### Fixed
+- **Chrome Compatibility**: Fixed right deep swipe button not working in Chrome
+  - Removed conflicting `swipe_right` class that triggered native SillyTavern behavior
+  - Updated CSS to work with custom `deep-swipe-right` class only
+  - Added `cursor: pointer` to both left and right swipe buttons for better UX
+
 ## [1.5.0] - 2026-02-06
 
 ### Safety & Reliability
