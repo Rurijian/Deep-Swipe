@@ -346,6 +346,12 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
             el.remove();
         });
         
+        // Check chat array after stale element removal
+        console.log('[Deep-Swipe-Cleanup] Chat array after stale removal:');
+        for (let i = 0; i < chat.length; i++) {
+            console.log(`[Deep-Swipe-Cleanup]   [${i}] mes="${chat[i]?.mes?.substring(0, 20)}..."`);
+        }
+        
         // Clean up UI
         if (waitingToast) {
             $(waitingToast).remove();
@@ -358,6 +364,12 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         const { removeSwipeOverlay } = await import('./ui.js');
         removeSwipeOverlay(messageId);
         console.log('[Deep-Swipe-Cleanup] Overlay removed');
+        
+        // Check chat array after overlay removal
+        console.log('[Deep-Swipe-Cleanup] Chat array after overlay removal:');
+        for (let i = 0; i < chat.length; i++) {
+            console.log(`[Deep-Swipe-Cleanup]   [${i}] mes="${chat[i]?.mes?.substring(0, 20)}..."`);
+        }
         
         // CRITICAL: Use printMessages to fully re-render the chat after cleanup
         // This is the most reliable way to ensure DOM matches chat array
