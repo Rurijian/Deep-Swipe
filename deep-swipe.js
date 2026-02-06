@@ -192,6 +192,12 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
         chatAtMessageIdName: chat[messageId]?.name
     });
     
+    // DEBUG: Log ALL messages after messageId to see if any are corrupted
+    console.log('[Deep Swipe] Full chat state check (messages after messageId):');
+    for (let i = messageId + 1; i < chat.length; i++) {
+        console.log(`[Deep Swipe]   chat[${i}]: mes="${chat[i]?.mes?.substring(0, 30)}" is_user=${chat[i]?.is_user}`);
+    }
+    
     // For USER swipes: Add placeholder now (message won't change)
     // For ASSISTANT swipes: Add placeholder now too (both use same flow now)
     let newSwipeIndex;
