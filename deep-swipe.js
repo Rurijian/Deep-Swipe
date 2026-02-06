@@ -231,8 +231,10 @@ export async function generateMessageSwipe(message, messageId, context, isUserMe
 
     // Save original messages after target BEFORE any modifications
     // We push a temp message at the end, so these need to be re-inserted after generation
-    const originalMessagesAfter = chat.slice(messageId + 1);
+    // CRITICAL: Deep clone messages after to prevent generation/streaming from modifying them
+    const originalMessagesAfter = JSON.parse(JSON.stringify(chat.slice(messageId + 1)));
     // Keep reference to target message for storing the swipe (still at chat[messageId])
+    // Don't clone this - we need to modify the actual message object for swipe management
     const originalTargetMessage = chat[messageId];
 
     // Set up event listener to capture reasoning from streaming
