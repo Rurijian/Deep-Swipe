@@ -2,6 +2,11 @@
 
 All notable changes to the Deep Swipe extension will be documented in this file.
 
+## [1.5.4] - 2026-02-07
+
+### Changed
+- Renamed extension folder from `Deep-Swipe` to `deep-swipe` (lowercase) for consistency
+
 ## [1.5.3] - 2026-02-06
 
 ### Fixed

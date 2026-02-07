@@ -35,7 +35,7 @@ This is a hard compatibility limit - the extensions fundamentally conflict in ho
 
 ## Installation
 
-1. Copy https://github.com/Rurijian/Deep-Swipe into extensions/install extensions (top-right button) as all-users
+1. Copy https://github.com/Rurijian/deep-swipe into extensions/install extensions (top-right button) as all-users
 2. Refresh Sillytavern maybe? It's probably fine though
 3. The extension will be available immediately
 
